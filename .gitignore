@@ -1,0 +1,14 @@
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+__pycache__/
+*.pyc
+
+stock_market_data/
+Stocks/
+*.csv
+*.json
+!package.json
+
+.env
+.vscode/
+.idea/
