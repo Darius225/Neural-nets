@@ -1,25 +1,25 @@
-"""CNN stock predictor — modular API.
-
-Quickstart:
-
-    from src import train_on_ticker, discover_csv_paths, predict_and_evaluate
-
-    paths = discover_csv_paths()
-    result = train_on_ticker("IBM", paths, plot=True)
-    eval_result = predict_and_evaluate(result.model, result.dataset.scaler,
-                                       new_df, expected_prices)
-"""
+"""CNN stock predictor — modular API."""
 
 from .data import (
     FEATURE_COLUMNS,
     Dataset,
+    TrainTestSplit,
     discover_csv_paths,
     load_csv,
     load_yfinance,
     prepare_dataset,
+    prepare_train_test_split,
+    slice_by_date,
 )
 from .evaluation import EvaluationResult, predict_and_evaluate
 from .hyperparam_search import SearchHistory, one_plus_one_es, random_individual
+from .metrics import (
+    PredictionMetrics,
+    compute_metrics,
+    directional_accuracy,
+    naive_persistence_forecast,
+    skill_score,
+)
 from .models import (
     BEST_HYPERPARAMETERS,
     HYPERPARAMETER_RANGES,
@@ -32,10 +32,18 @@ from .training import TrainingResult, train, train_on_prepared, train_on_ticker
 __all__ = [
     "FEATURE_COLUMNS",
     "Dataset",
+    "TrainTestSplit",
+    "PredictionMetrics",
+    "compute_metrics",
+    "directional_accuracy",
+    "naive_persistence_forecast",
+    "skill_score",
     "discover_csv_paths",
     "load_csv",
     "load_yfinance",
     "prepare_dataset",
+    "prepare_train_test_split",
+    "slice_by_date",
     "EvaluationResult",
     "predict_and_evaluate",
     "SearchHistory",
