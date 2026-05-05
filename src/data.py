@@ -14,7 +14,7 @@ from __future__ import annotations
 import glob
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -151,6 +151,121 @@ def prepare_train_test_split(
         scaler=scaler,
         train_close_min=float(train_df["Close"].min()),
         train_close_max=float(train_df["Close"].max()),
+    )
+
+
+@dataclass
+class WindowedReturnsSplit:
+    """Train/val/test for the windowed-returns pipeline.
+
+    Each input is a ``(window_size, n_features)`` slice; each target is
+    the *next-day simple return* ``(close[t+1] - close[t]) / close[t]``.
+    The window is z-scored per-window per-feature so the model is
+    invariant to absolute price level — handles regime shifts naturally.
+
+    To recover a predicted price from a predicted return:
+        predicted_close[t+1] = close_at_t * (1 + predicted_return)
+    """
+    X_train: np.ndarray
+    X_val: np.ndarray
+    X_test: np.ndarray
+    y_train: np.ndarray
+    y_val: np.ndarray
+    y_test: np.ndarray
+    close_at_t_test: np.ndarray
+    actual_close_test: np.ndarray
+    test_index: pd.Index
+    train_close_min: float
+    train_close_max: float
+    window_size: int
+    n_features: int
+
+    @property
+    def input_shape(self) -> Tuple[int, int]:
+        return self.window_size, self.n_features
+
+
+def _zscore_window(window: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    """Standardise each feature within a single window (axis=0)."""
+    mu = window.mean(axis=0, keepdims=True)
+    sigma = window.std(axis=0, keepdims=True)
+    return (window - mu) / (sigma + eps)
+
+
+def _build_windows(features: np.ndarray, closes: np.ndarray, window_size: int):
+    """Sliding windows + per-window z-score. Returns X, y, close_at_t."""
+    n = len(features)
+    if n < window_size + 1:
+        raise ValueError(f"Need at least {window_size + 1} rows, got {n}")
+
+    n_windows = n - window_size
+    X = np.empty((n_windows, window_size, features.shape[1]), dtype=np.float32)
+    y = np.empty(n_windows, dtype=np.float32)
+    close_at_t = np.empty(n_windows, dtype=np.float32)
+
+    for i in range(n_windows):
+        window = features[i : i + window_size]
+        X[i] = _zscore_window(window)
+        close_t = closes[i + window_size - 1]
+        close_t1 = closes[i + window_size]
+        y[i] = (close_t1 - close_t) / close_t
+        close_at_t[i] = close_t
+    return X, y, close_at_t
+
+
+def prepare_windowed_returns_split(
+    df: pd.DataFrame,
+    train_end: str,
+    test_start: str,
+    test_end: Optional[str] = None,
+    window_size: int = 30,
+    internal_val_fraction: float = 0.15,
+) -> WindowedReturnsSplit:
+    """Build a (train, internal_val, test) split for windowed-returns training.
+
+    Internal val is the last ``internal_val_fraction`` of pre-``train_end``
+    data — used for early stopping. Test is everything in
+    [``test_start``, ``test_end``].
+    """
+    if not isinstance(df.index, pd.DatetimeIndex):
+        raise ValueError("df must have a DatetimeIndex — use load_csv(..., with_dates=True)")
+
+    df = df.sort_index()
+    train_full = slice_by_date(df, end=train_end)
+    test_df = slice_by_date(df, start=test_start, end=test_end)
+
+    if len(train_full) < window_size + 10 or len(test_df) < window_size + 2:
+        raise ValueError(
+            f"Not enough rows for window={window_size}: "
+            f"train={len(train_full)}, test={len(test_df)}"
+        )
+
+    feat_cols = FEATURE_COLUMNS
+    train_features = train_full[feat_cols].values.astype(np.float32)
+    train_closes = train_full["Close"].values.astype(np.float32)
+    test_features = test_df[feat_cols].values.astype(np.float32)
+    test_closes = test_df["Close"].values.astype(np.float32)
+
+    X_full, y_full, _ = _build_windows(train_features, train_closes, window_size)
+
+    split = int(len(X_full) * (1 - internal_val_fraction))
+    X_train, X_val = X_full[:split], X_full[split:]
+    y_train, y_val = y_full[:split], y_full[split:]
+
+    X_test, y_test, close_at_t_test = _build_windows(test_features, test_closes, window_size)
+    actual_close_test = close_at_t_test * (1 + y_test)
+    test_index = test_df.index[window_size:]
+
+    return WindowedReturnsSplit(
+        X_train=X_train, X_val=X_val, X_test=X_test,
+        y_train=y_train, y_val=y_val, y_test=y_test,
+        close_at_t_test=close_at_t_test,
+        actual_close_test=actual_close_test,
+        test_index=test_index,
+        train_close_min=float(train_full["Close"].min()),
+        train_close_max=float(train_full["Close"].max()),
+        window_size=window_size,
+        n_features=train_features.shape[1],
     )
 
 

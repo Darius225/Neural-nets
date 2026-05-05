@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from tensorflow.keras import Sequential
-from tensorflow.keras.layers import Conv1D, Dense, Flatten
+from tensorflow.keras.layers import Conv1D, Dense, Dropout, Flatten
 
 HYPERPARAMETER_RANGES: Dict[str, List[Any]] = {
     "number_of_filters": list(range(32, 1024)),
@@ -51,6 +51,30 @@ def build_best_cnn(input_shape: int, params: Optional[Dict[str, Any]] = None) ->
         ]
     )
     model.compile(optimizer="adam", loss="mse", metrics=["mape", "mae"])
+    return model
+
+
+def build_returns_cnn(window_size: int, n_features: int = 5) -> Sequential:
+    """CNN for the windowed-returns pipeline.
+
+    Input shape is ``(window_size, n_features)`` — a real temporal patch,
+    not a single day. Output is one scalar = predicted next-day return.
+
+    Architecture is intentionally modest (two Conv1D, one Dense, dropout
+    for regularisation) — smaller than ``build_best_cnn`` because the
+    target (returns) is harder to overfit than absolute prices.
+    """
+    model = Sequential(
+        [
+            Conv1D(64, kernel_size=3, activation="relu", input_shape=(window_size, n_features)),
+            Conv1D(32, kernel_size=3, activation="relu"),
+            Flatten(),
+            Dense(64, activation="relu"),
+            Dropout(0.2),
+            Dense(1),
+        ]
+    )
+    model.compile(optimizer="adam", loss="mse", metrics=["mae"])
     return model
 
 
