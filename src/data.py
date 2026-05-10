@@ -14,7 +14,7 @@ from __future__ import annotations
 import glob
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -220,17 +220,33 @@ def prepare_windowed_returns_split(
     test_end: Optional[str] = None,
     window_size: int = 30,
     internal_val_fraction: float = 0.15,
+    feature_builder: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None,
 ) -> WindowedReturnsSplit:
     """Build a (train, internal_val, test) split for windowed-returns training.
 
     Internal val is the last ``internal_val_fraction`` of pre-``train_end``
     data — used for early stopping. Test is everything in
     [``test_start``, ``test_end``].
+
+    ``feature_builder`` is an optional callable that takes the OHLCV
+    DataFrame and returns a new DataFrame of derived features (e.g.
+    :func:`src.features.build_technical_features`). When given, the
+    model trains on those features instead of raw OHLCV. NaNs from the
+    warmup period are dropped.
     """
     if not isinstance(df.index, pd.DatetimeIndex):
         raise ValueError("df must have a DatetimeIndex — use load_csv(..., with_dates=True)")
 
     df = df.sort_index()
+
+    if feature_builder is not None:
+        features_full = feature_builder(df)
+        usable = features_full.dropna().index
+        df = df.loc[usable]
+        feat_df = features_full.loc[usable]
+    else:
+        feat_df = df[FEATURE_COLUMNS]
+
     train_full = slice_by_date(df, end=train_end)
     test_df = slice_by_date(df, start=test_start, end=test_end)
 
@@ -240,10 +256,9 @@ def prepare_windowed_returns_split(
             f"train={len(train_full)}, test={len(test_df)}"
         )
 
-    feat_cols = FEATURE_COLUMNS
-    train_features = train_full[feat_cols].values.astype(np.float32)
+    train_features = feat_df.loc[train_full.index].values.astype(np.float32)
     train_closes = train_full["Close"].values.astype(np.float32)
-    test_features = test_df[feat_cols].values.astype(np.float32)
+    test_features = feat_df.loc[test_df.index].values.astype(np.float32)
     test_closes = test_df["Close"].values.astype(np.float32)
 
     X_full, y_full, _ = _build_windows(train_features, train_closes, window_size)

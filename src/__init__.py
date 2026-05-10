@@ -14,6 +14,7 @@ from .data import (
     slice_by_date,
 )
 from .evaluation import EvaluationResult, predict_and_evaluate
+from .features import build_technical_features
 from .hyperparam_search import SearchHistory, one_plus_one_es, random_individual
 from .metrics import (
     PredictionMetrics,
