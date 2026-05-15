@@ -54,16 +54,28 @@ def build_best_cnn(input_shape: int, params: Optional[Dict[str, Any]] = None) ->
     return model
 
 
-def build_returns_cnn(window_size: int, n_features: int = 5) -> Sequential:
+def build_returns_cnn(
+    window_size: int,
+    n_features: int = 5,
+    huber_delta: Optional[float] = 0.05,
+) -> Sequential:
     """CNN for the windowed-returns pipeline.
 
     Input shape is ``(window_size, n_features)`` — a real temporal patch,
     not a single day. Output is one scalar = predicted next-day return.
 
-    Architecture is intentionally modest (two Conv1D, one Dense, dropout
-    for regularisation) — smaller than ``build_best_cnn`` because the
-    target (returns) is harder to overfit than absolute prices.
+    The architecture is intentionally modest (two Conv1D, one Dense,
+    dropout for regularisation). Smaller than ``build_best_cnn`` because
+    the target (returns) is harder to overfit than absolute prices.
+
+    Default loss is **Huber** (quadratic near zero, linear in the tails)
+    so a few extreme target returns — splits, IPO crashes, 2008
+    single-day moves — don't dominate the gradient and force the model
+    into degenerate "predict the mean" behaviour the way plain MSE does.
+    Pass ``huber_delta=None`` to fall back to MSE.
     """
+    import tensorflow as tf
+    loss = "mse" if huber_delta is None else tf.keras.losses.Huber(delta=huber_delta)
     model = Sequential(
         [
             Conv1D(64, kernel_size=3, activation="relu", input_shape=(window_size, n_features)),
@@ -74,7 +86,7 @@ def build_returns_cnn(window_size: int, n_features: int = 5) -> Sequential:
             Dense(1),
         ]
     )
-    model.compile(optimizer="adam", loss="mse", metrics=["mae"])
+    model.compile(optimizer="adam", loss=loss, metrics=["mae"])
     return model
 
 
