@@ -18,12 +18,12 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Any, Dict, List, Optional, Tuple
 
 import tensorflow as tf
 
 from .data import Dataset
+from .evolution import memoize_by
 from .models import HYPERPARAMETER_RANGES, build_general_cnn
 from .training import train_on_prepared
 
@@ -76,20 +76,13 @@ def evaluate(
     batch_size: int,
     early_stopping_patience: Optional[int],
     verbose: bool = True,
-    cache: Optional[Dict[_CacheKey, float]] = None,
 ) -> float:
     """Train and return final validation MAPE (lower is better).
 
-    ``cache`` short-circuits duplicate evaluations. Failed configurations
-    (e.g. kernel larger than feature window) return ``inf`` so they're
-    never selected.
+    Pure score-the-individual. Caching lives in :func:`memoize_by` and
+    is applied by the caller; failed configurations return ``inf`` so
+    they're never selected.
     """
-    key = _key(individual)
-    if cache is not None and key in cache:
-        if verbose:
-            print(f"[cache] {cache[key]:.4f} MAPE  {individual}")
-        return cache[key]
-
     tf.keras.backend.clear_session()
     start = time.time()
     try:
@@ -104,14 +97,11 @@ def evaluate(
         fitness = result.final_val_mape
         if verbose:
             print(f"[ok] {fitness:.4f} MAPE in {time.time() - start:.1f}s  {individual}")
+        return fitness
     except Exception as exc:
         if verbose:
             print(f"[fail] {exc}  {individual}")
-        fitness = float("inf")
-
-    if cache is not None:
-        cache[key] = fitness
-    return fitness
+        return float("inf")
 
 
 @dataclass
@@ -140,22 +130,14 @@ def one_plus_one_es(
     """(1+1)-ES with restart on stagnation. Operates on a pre-prepared
     ``Dataset`` so scaling/splitting happens exactly once."""
     rng = random.Random(seed)
-    cache: Optional[Dict[_CacheKey, float]] = {} if use_cache else None
     history = SearchHistory()
 
-    eval_fn = partial(
-        evaluate, dataset=dataset, epochs=epochs, batch_size=batch_size,
-        early_stopping_patience=early_stopping_patience,
-        verbose=verbose, cache=cache,
-    )
-
-    def track_eval(individual: Individual) -> float:
-        """Evaluate, update history counters, return fitness."""
-        if cache is not None and _key(individual) in cache:
-            history.cache_hits += 1
-        fit = eval_fn(individual)
-        history.evaluations += 1
-        return fit
+    @memoize_by(_key, enabled=use_cache)
+    def score(individual: Individual) -> float:
+        return evaluate(
+            individual, dataset, epochs=epochs, batch_size=batch_size,
+            early_stopping_patience=early_stopping_patience, verbose=verbose,
+        )
 
     def consider(candidate: Individual, fitness: float) -> None:
         """Update best_* if the candidate is the new global optimum."""
@@ -166,14 +148,14 @@ def one_plus_one_es(
                 print(f"  -> new best {fitness:.4f}")
 
     current = initial if initial is not None else random_individual(rng)
-    current_fitness = track_eval(current)
+    current_fitness = score(current)
     consider(current, current_fitness)
     history.best_fitness_per_iteration.append(current_fitness)
     no_progress = 0
 
     for _ in range(max_iterations):
         candidate = mutate(current, mutation_probability, rng)
-        candidate_fitness = track_eval(candidate)
+        candidate_fitness = score(candidate)
 
         if candidate_fitness <= current_fitness:
             current, current_fitness = candidate, candidate_fitness
@@ -186,9 +168,11 @@ def one_plus_one_es(
             if verbose:
                 print("  -> stagnation, restarting")
             current = random_individual(rng)
-            current_fitness = track_eval(current)
+            current_fitness = score(current)
             no_progress = 0
 
         history.best_fitness_per_iteration.append(history.best_fitness)
 
+    history.evaluations = score.hits + score.misses
+    history.cache_hits = score.hits
     return history

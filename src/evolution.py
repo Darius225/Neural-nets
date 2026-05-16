@@ -16,11 +16,11 @@ training run.
 
 from __future__ import annotations
 
+import functools
 import random
 import time
 from dataclasses import dataclass, field
-from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import Any, Callable, Dict, Hashable, List, Optional, Tuple, Type, TypeVar
 
 from pydantic import BaseModel
 
@@ -29,10 +29,44 @@ from .configs import EvolutionConfig
 ConfigT = Type[BaseModel]
 FitnessFn = Callable[[BaseModel], float]
 _CacheKey = Tuple[Tuple[str, Any], ...]
+T = TypeVar("T")
 
 
 def _key(cfg: BaseModel) -> _CacheKey:
     return tuple(sorted(cfg.model_dump().items()))
+
+
+def memoize_by(key_fn: Callable[[Any], Hashable], *, enabled: bool = True):
+    """Cache function results, keying by ``key_fn(first_arg)``.
+
+    The decorated function exposes ``.hits``, ``.misses``, and ``.cache``
+    attributes for inspection. With ``enabled=False`` no caching happens
+    and ``.misses`` simply counts every call — handy for benchmarking
+    "with vs without cache" without changing call sites.
+
+    Used here because the natural argument (a dict / Pydantic model) is
+    not hashable, so :func:`functools.cache` can't help directly.
+    """
+    def decorator(fn: Callable[..., T]) -> Callable[..., T]:
+        @functools.wraps(fn)
+        def wrapper(arg, *rest, **kwargs):
+            if not enabled:
+                wrapper.misses += 1
+                return fn(arg, *rest, **kwargs)
+            key = key_fn(arg)
+            if key in wrapper.cache:
+                wrapper.hits += 1
+                return wrapper.cache[key]
+            wrapper.misses += 1
+            result = fn(arg, *rest, **kwargs)
+            wrapper.cache[key] = result
+            return result
+
+        wrapper.cache = {}
+        wrapper.hits = 0
+        wrapper.misses = 0
+        return wrapper
+    return decorator
 
 
 def random_config(schema: ConfigT, ranges: Dict[str, List[Any]], rng: random.Random) -> BaseModel:
@@ -113,34 +147,18 @@ def one_plus_one_es(
     """
     es = es or EvolutionConfig()
     rng = random.Random(es.seed)
-    cache: Optional[Dict[_CacheKey, float]] = {} if use_cache else None
     result = EvolutionResult(best_config=None, best_fitness=float("inf"))
 
+    @memoize_by(_key, enabled=use_cache)
     def evaluate(cfg: BaseModel) -> float:
-        """Pure evaluate-with-cache. No bookkeeping side effects."""
-        if cache is not None:
-            k = _key(cfg)
-            if k in cache:
-                if es.verbose:
-                    print(f"  [cache] {cache[k]:.5f}  {cfg.model_dump()}")
-                return cache[k]
+        """Train the candidate and score it. No caching here — that lives
+        in the decorator. Failures become +inf so they're never selected."""
         try:
-            score = float(fitness(cfg))
+            return float(fitness(cfg))
         except Exception as exc:
             if es.verbose:
                 print(f"  [fail] {exc}  {cfg.model_dump()}")
-            score = float("inf")
-        if cache is not None:
-            cache[_key(cfg)] = score
-        return score
-
-    def track_eval(cfg: BaseModel) -> float:
-        """Evaluate, update result counters, return fitness."""
-        if cache is not None and _key(cfg) in cache:
-            result.cache_hits += 1
-        score = evaluate(cfg)
-        result.evaluations += 1
-        return score
+            return float("inf")
 
     def consider(cfg: BaseModel, fit: float) -> None:
         """Update best_* if this candidate is the new global optimum."""
@@ -152,14 +170,14 @@ def one_plus_one_es(
 
     start = time.time()
     current = initial if initial is not None else random_config(schema, ranges, rng)
-    current_fit = track_eval(current)
+    current_fit = evaluate(current)
     consider(current, current_fit)
     result.best_fitness_per_iter.append(current_fit)
     no_progress = 0
 
     for _ in range(es.max_iterations):
         candidate = mutate_config(current, ranges, es.mutation_probability, rng)
-        candidate_fit = track_eval(candidate)
+        candidate_fit = evaluate(candidate)
 
         if candidate_fit <= current_fit:
             current, current_fit = candidate, candidate_fit
@@ -172,10 +190,12 @@ def one_plus_one_es(
             if es.verbose:
                 print("  -> stagnation, restarting from random individual")
             current = random_config(schema, ranges, rng)
-            current_fit = track_eval(current)
+            current_fit = evaluate(current)
             no_progress = 0
 
         result.best_fitness_per_iter.append(result.best_fitness)
 
+    result.evaluations = evaluate.hits + evaluate.misses
+    result.cache_hits = evaluate.hits
     result.wall_time_s = time.time() - start
     return result
