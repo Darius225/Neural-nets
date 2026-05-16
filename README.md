@@ -40,22 +40,90 @@ result we re-derived rigorously with a clean pipeline.
 src/
 ├── configs.py          # Pydantic models: ReturnsCNNConfig, ExperimentConfig,
 │                       #   EvolutionConfig + RETURNS_CNN_RANGES for ES
-├── data.py             # Loaders (CSV / yfinance), date-range slicing,
-│                       #   Dataset / TrainTestSplit / WindowedReturnsSplit /
-│                       #   MultiTickerSplit + scaler-on-train-only logic
+├── data/
+│   ├── loaders.py      # CSV / yfinance loaders + slice_by_date
+│   └── splits.py       # Dataset / TrainTestSplit / WindowedReturnsSplit /
+│                       #   MultiTickerSplit + prepare_* + per-window z-score
 ├── features.py         # 10 technical indicators from OHLCV
 ├── models.py           # build_best_cnn / build_general_cnn / build_returns_cnn
 ├── training.py         # train, train_on_prepared (search-loop-safe)
 ├── evaluation.py       # predict_and_evaluate returning predictions + metrics
 ├── metrics.py          # MAE, RMSE, MAPE, R², directional accuracy,
 │                       #   skill score vs persistence, out-of-train-range %
-├── evolution.py        # Schema-driven (1+1)-ES + memoize_by decorator
-├── hyperparam_search.py# Legacy ES over the original build_general_cnn
+├── search/
+│   ├── evolution.py    # Schema-driven (1+1)-ES + memoize_by decorator
+│   └── hyperparam.py   # Legacy ES over build_general_cnn's hyperparam dict
 └── plotting.py         # Training curves + actual-vs-predicted plots
 
 experiments/            # One reproducible script per pipeline version
 benchmarks/             # bench_search.py (speed), bench_memory.py (RSS)
 tests/                  # 34 pytest tests for metrics, features, ES plumbing
+```
+
+### Module dependency graph
+
+```mermaid
+flowchart TB
+    configs[configs.py]
+    features[features.py]
+    plotting[plotting.py]
+    metrics[metrics.py]
+
+    subgraph data ["data/"]
+        loaders[loaders.py]
+        splits[splits.py]
+    end
+
+    subgraph search ["search/"]
+        evolution[evolution.py]
+        hyperparam[hyperparam.py]
+    end
+
+    models[models.py]
+    training[training.py]
+    evaluation[evaluation.py]
+
+    loaders --> splits
+    splits --> training
+    splits --> evaluation
+    configs --> models
+    configs --> evolution
+    models --> training
+    training --> hyperparam
+    splits --> hyperparam
+    evolution --> hyperparam
+    splits --> evaluation
+```
+
+### Data flow for one prediction
+
+```mermaid
+flowchart LR
+    CSV[CSV / yfinance] -->|load_csv| OHLCV[OHLCV<br/>DataFrame]
+    OHLCV -->|build_technical_features| FE[10 derived<br/>features]
+    FE -->|prepare_windowed_<br/>returns_split| WIN[30-day windows<br/>z-scored per window]
+    WIN --> X[X: 30 × 10]
+    WIN --> y[y: next-day return]
+    X --> CNN[build_returns_cnn]
+    y --> CNN
+    CNN -->|model.predict| R[predicted<br/>return]
+    R -->|× 1+r × close_t| PRICE[predicted price]
+    PRICE -->|skill vs<br/>persistence| METRIC[skill_score<br/>directional_acc<br/>MAE / RMSE / MAPE]
+```
+
+### Methodology evolution
+
+```mermaid
+graph LR
+    V1["<b>v1</b><br/>raw price target<br/>1-day OHLCV<br/><b>skill −0.44</b>"]
+    V2["<b>v2</b><br/>returns target<br/>30-day window<br/>per-window z-score<br/><b>skill −0.02</b>"]
+    V3["<b>v3</b><br/>+ 10 tech features<br/><b>skill −0.02</b>"]
+    V4["<b>v4</b><br/>200 tickers stacked<br/>Huber loss<br/><b>skill −0.002</b>"]
+    V5["<b>v5</b><br/>(1+1)-ES on hyperparams<br/><b>skill −0.001</b><br/>2/10 beats persistence"]
+    V1 -->|fix target| V2
+    V2 -->|enrich features| V3
+    V3 -->|scale data| V4
+    V4 -->|tune model| V5
 ```
 
 ## Setup
