@@ -60,3 +60,37 @@ def test_log_return_matches_definition(synthetic_ohlcv):
     pd.testing.assert_series_equal(
         feat["log_return"], expected, check_names=False
     )
+
+
+class TestBuildWindowsHorizon:
+    """horizon arg added so multi-day forecasts share the windowing code."""
+
+    def test_horizon_1_targets_match_next_day_return(self):
+        from src.data.splits import _build_windows
+        closes = np.array([100, 101, 102, 100, 103], dtype=np.float32)
+        feats = np.column_stack([closes, closes])  # 2 dummy features
+        X, y, c_at_t = _build_windows(feats, closes, window_size=2, horizon=1)
+        # 3 windows (n - window - horizon + 1 = 5 - 2 - 1 + 1 = 3)
+        assert len(X) == 3
+        # y[0] = (close[2] - close[1]) / close[1] = (102-101)/101
+        assert y[0] == pytest.approx((102 - 101) / 101)
+        assert c_at_t[0] == 101  # close at end of first window
+
+    def test_horizon_5_compounded_return(self):
+        from src.data.splits import _build_windows
+        closes = np.arange(1, 21, dtype=np.float32) * 10  # 10, 20, ..., 200
+        feats = np.column_stack([closes, closes])
+        X, y, c_at_t = _build_windows(feats, closes, window_size=3, horizon=5)
+        # 13 windows
+        assert len(X) == 20 - 3 - 5 + 1
+        # First window covers closes[0:3] = [10,20,30]; close_at_t = 30
+        # 5-day target: closes[2+5] = closes[7] = 80 → (80-30)/30
+        assert c_at_t[0] == 30
+        assert y[0] == pytest.approx((80 - 30) / 30)
+
+    def test_not_enough_rows_raises(self):
+        from src.data.splits import _build_windows
+        closes = np.arange(5, dtype=np.float32)
+        feats = closes.reshape(-1, 1)
+        with pytest.raises(ValueError, match="Need at least"):
+            _build_windows(feats, closes, window_size=4, horizon=3)  # need 7, have 5
