@@ -32,6 +32,9 @@ uv run python experiments/crypto_eth_v3.py
 uv run python scripts/fetch_binance.py BTCUSDT --start 2018-01-01 --end 2026-05-17
 uv run python experiments/walk_forward_eth.py
 
+# stock-side mirror: 10 tickers x 6 years = 60-cell panel
+uv run python experiments/walk_forward_stocks.py
+
 # predict tomorrow's close for a ticker you trained on
 uv run python scripts/train_and_save.py JPM
 uv run python scripts/predict.py JPM
@@ -96,10 +99,33 @@ years:
   ostensibly built for — has the *worst* IC, meaning the model
   fails most exactly when it'd be most useful.
 
+- [`experiments/walk_forward_stocks.py`](experiments/walk_forward_stocks.py)
+  — the **stock-side mirror** with 10 tickers × 6 test years = 60 cells.
+  Mean IC across the panel: **±0.004** depending on the run
+  (TF non-determinism on CPU). The mean's sign flips between
+  consecutive runs without code changes — cleanest possible evidence
+  of "no systematic signal".
+
+      year    mean IC   notes
+      2005    +0.020
+      2006    -0.013
+      2007    -0.017    <- crisis approaches
+      2008    -0.007    <- crisis year — NOT catastrophic
+      2009    -0.010    <- recovery
+      2010    +0.003
+
+  **Cross-asset finding**: stocks 2008 is NOT catastrophic for the
+  model (IC ~0), whereas crypto 2022 is (IC -0.11). Plausible reason:
+  the 2008 stock crisis was slow-rolling over months so prior
+  technical patterns partially held; crypto 2022 had two event-driven
+  shocks (LUNA depeg in May, FTX collapse in November) that broke
+  the price structure within days.
+
 The conclusion isn't "the model is bad"; it's that **weak-form
-market efficiency holds on public daily OHLCV, and survives stacking
-the obvious levers** — a real, well-known result we re-derived
-rigorously with a clean pipeline and proper time-series validation.
+market efficiency holds on public daily OHLCV across asset classes,
+crisis years included, and survives stacking the obvious levers** —
+a real, well-known result we re-derived rigorously with a clean
+pipeline and proper time-series validation.
 
 ## Architecture
 
@@ -289,6 +315,9 @@ python experiments/evolve_eth_btc_5day.py
 
 # ... and the walk-forward run that proves it was a single-year lucky draw
 python experiments/walk_forward_eth.py
+
+# stock-side cross-asset mirror: 60-cell panel across 10 tickers x 6 years
+python experiments/walk_forward_stocks.py
 ```
 
 Each script saves per-ticker plots into `experiments/plots*/`. Lehman's
@@ -339,6 +368,14 @@ synthetic-landscape convergence). Runs in ~12 s on CPU.
   crisis fold (LUNA + FTX) has the *worst* IC of the panel. A single
   OOS year is never enough to claim alpha; walk-forward is the test
   that matters.
+- **The stock-side mirror confirms it across a 60-cell panel.**
+  10 tickers × 6 test years (2005-2010) gives mean IC = ±0.004 with
+  the *sign flipping between consecutive runs*. Run-to-run noise from
+  TF threading already dominates any systematic effect — cleanest
+  possible evidence of "no signal". Unlike crypto 2022, the 2008
+  crisis fold here has IC ≈ 0 — the slow-rolling stock crisis didn't
+  break technical patterns the way the event-driven crypto crashes
+  did.
 - **What would actually help (not done here):** alternative data
   (news sentiment, on-chain glassnode metrics, options flow, order
   book), or much higher frequency (intraday microstructure). Each
