@@ -25,8 +25,12 @@ uv sync                                                    # ~2-3 s with cache
 uv run python experiments/crisis_2008_v3.py
 
 # crypto — ETH-USD through the LUNA + FTX shocks
-uv run python scripts/fetch_binance.py ETHUSDT --start 2018-01-01 --end 2024-01-01
+uv run python scripts/fetch_binance.py ETHUSDT --start 2018-01-01 --end 2026-05-17
 uv run python experiments/crypto_eth_v3.py
+
+# walk-forward validation across 6 disjoint years (the rigorous test)
+uv run python scripts/fetch_binance.py BTCUSDT --start 2018-01-01 --end 2026-05-17
+uv run python experiments/walk_forward_eth.py
 
 # predict tomorrow's close for a ticker you trained on
 uv run python scripts/train_and_save.py JPM
@@ -59,9 +63,43 @@ clearly above it. AAPL's skill goes from −0.07 in v3 to **+0.007** in
 v5 after ES finds (dropout 0.4, huber_delta 0.01, lr 2e-3) — the only
 single-ticker result we'd call a real win, and even then within noise.
 
+### Crypto extension + walk-forward validation
+
+Two follow-up experiments stack the highest-probability levers and
+then check whether the result holds across multiple out-of-sample
+years:
+
+- [`experiments/evolve_eth_btc_5day.py`](experiments/evolve_eth_btc_5day.py)
+  — 5-day horizon + BTC as exogenous feature. Single 2025 test
+  window reports **IC = +0.077**, a 250× lift over the H=1 baseline.
+  Tempting to call this progress.
+
+- [`experiments/walk_forward_eth.py`](experiments/walk_forward_eth.py)
+  — same setup, retrained on **6 disjoint folds** (2020 .. 2025+).
+  Results destroy the optimism:
+
+      fold    IC        skill      DirAcc%
+      2020   +0.077    -0.006    50.9
+      2021   +0.098    -0.001    53.8
+      2022   -0.112    -0.215    48.9    <- LUNA + FTX, catastrophic
+      2023   -0.008    -0.029    49.9
+      2024   -0.082    -0.012    55.7
+      2025+  +0.048    -0.060    53.4
+
+      mean   +0.0035   -0.054
+      stdev   0.086     0.082
+      t-stat  +0.10           -> NOT significant
+
+  The 2025 IC = +0.077 is a single draw from a distribution whose
+  mean is zero and stdev is 0.086 across the panel. Walk-forward
+  exposes it as noise. 2022 — the year this whole framework was
+  ostensibly built for — has the *worst* IC, meaning the model
+  fails most exactly when it'd be most useful.
+
 The conclusion isn't "the model is bad"; it's that **weak-form
-market efficiency holds on public daily OHLCV** — a real, well-known
-result we re-derived rigorously with a clean pipeline.
+market efficiency holds on public daily OHLCV, and survives stacking
+the obvious levers** — a real, well-known result we re-derived
+rigorously with a clean pipeline and proper time-series validation.
 
 ## Architecture
 
@@ -242,8 +280,15 @@ python experiments/multi_ticker_v4.py
 python experiments/evolve_returns_v5.py
 
 # crypto — same v3 pipeline on ETH-USD with LUNA + FTX in the test window
-python scripts/fetch_binance.py ETHUSDT --start 2018-01-01 --end 2024-01-01
+python scripts/fetch_binance.py ETHUSDT --start 2018-01-01 --end 2026-05-17
 python experiments/crypto_eth_v3.py
+
+# crypto + 5-day horizon + BTC exogenous feature (looks promising on 2025...)
+python scripts/fetch_binance.py BTCUSDT --start 2018-01-01 --end 2026-05-17
+python experiments/evolve_eth_btc_5day.py
+
+# ... and the walk-forward run that proves it was a single-year lucky draw
+python experiments/walk_forward_eth.py
 ```
 
 Each script saves per-ticker plots into `experiments/plots*/`. Lehman's
@@ -286,11 +331,19 @@ synthetic-landscape convergence). Runs in ~12 s on CPU.
   (`dropout 0.4`, `huber_delta 0.01`, `lr 2e-3`) which lifts mean
   skill from −0.013 to −0.001. AAPL's skill becomes positive. Real,
   but within noise.
+- **Longer horizons and cross-asset features lift the in-sample IC
+  by 250× — but walk-forward kills it.** The H=5 ETH+BTC model showed
+  IC = +0.077 on the 2025 OOS window. The same setup retrained on
+  six disjoint folds (2020 .. 2025) has mean IC = +0.0035 with stdev
+  0.086 and t-stat 0.10 — indistinguishable from noise. The 2022
+  crisis fold (LUNA + FTX) has the *worst* IC of the panel. A single
+  OOS year is never enough to claim alpha; walk-forward is the test
+  that matters.
 - **What would actually help (not done here):** alternative data
-  (news sentiment, options flow, order book), longer horizons (5-20
-  day returns), or a directional classification objective instead of
-  magnitude regression. Each requires assumptions the current pipeline
-  deliberately keeps simple.
+  (news sentiment, on-chain glassnode metrics, options flow, order
+  book), or much higher frequency (intraday microstructure). Each
+  requires a data source the current OHLCV-only pipeline deliberately
+  doesn't touch.
 
 ## Tech stack
 
