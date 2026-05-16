@@ -128,13 +128,26 @@ graph LR
 
 ## Setup
 
+Two equivalent options — pick one. Versions are pinned (TensorFlow 2.14
+is paired with specific keras / protobuf shims; bumping on Windows
+tends to break in unexpected places).
+
+**With [uv](https://docs.astral.sh/uv/)** (recommended — 50-100× faster
+than pip, locks dependencies in `uv.lock`):
+
 ```bash
-pip install -r requirements.txt
+uv sync                          # create venv + install everything
+uv run pytest tests/             # use the project venv without activating
 ```
 
-Versions are pinned. TensorFlow 2.14 is paired with specific keras /
-protobuf shims — bumping it on Windows tends to break in unexpected
-places.
+**With plain pip**:
+
+```bash
+python -m venv .venv
+. .venv/bin/activate             # or .venv\Scripts\activate on Windows
+pip install -e .[dev]            # uses pyproject.toml
+# or, equivalently:  pip install -r requirements.txt
+```
 
 Training data (S&P 500 CSVs from the Kaggle dump) is *not* in the
 repo. Drop the files into `stock_market_data/sp500/csv/` to reproduce.
