@@ -1,20 +1,44 @@
+# Jupyter scratch
 .ipynb_checkpoints/
 *-checkpoint.ipynb
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
 
-stock_market_data/
-Stocks/
-*.csv
-*.json
-*.txt
-!package.json
-!README.md
-!requirements.txt
+# Virtualenvs
+.venv/
+venv/
+env/
 
-# Old notebook files
-attempting.ipynb
-
-.env
+# IDEs
 .vscode/
 .idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Local secrets
+.env
+.env.local
+
+# Bulk datasets — kept locally, NOT committed.
+stock_market_data/
+Stocks/
+ibm.us.txt
+
+# Old scratchpad notebooks (kept locally only).
+attempting.ipynb
