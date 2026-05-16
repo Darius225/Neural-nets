@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, Hashable, List, Optional, Tuple, Type, T
 
 from pydantic import BaseModel
 
-from .configs import EvolutionConfig
+from ..configs import EvolutionConfig
 
 ConfigT = Type[BaseModel]
 FitnessFn = Callable[[BaseModel], float]

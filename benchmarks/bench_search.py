@@ -30,7 +30,7 @@ import pandas as pd
 import tensorflow as tf
 
 from src.data import Dataset, prepare_dataset
-from src.hyperparam_search import _key, mutate, random_individual
+from src.search.hyperparam import _key, mutate, random_individual
 from src.models import build_general_cnn
 from src.training import train, train_on_prepared
 

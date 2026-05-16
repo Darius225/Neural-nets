@@ -39,9 +39,15 @@ from .configs import (
     ReturnsCNNConfig,
 )
 from .evaluation import EvaluationResult, predict_and_evaluate
-from .evolution import EvolutionResult, mutate_config, one_plus_one_es as evolve, random_config
 from .features import build_technical_features
-from .hyperparam_search import SearchHistory, one_plus_one_es, random_individual
+from .search.evolution import (
+    EvolutionResult,
+    memoize_by,
+    mutate_config,
+    random_config,
+)
+from .search.evolution import one_plus_one_es as evolve
+from .search.hyperparam import SearchHistory, one_plus_one_es, random_individual
 from .models import (
     BEST_HYPERPARAMETERS,
     HYPERPARAMETER_RANGES,

@@ -1,18 +1,20 @@
-"""Data loading and preparation for the stock predictor.
+"""Supervised splits used by the four pipeline versions.
 
-Two sources are supported:
-  - Local CSVs under ``stock_market_data/sp500/csv/`` (Kaggle S&P 500 dump).
-  - Live data via ``yfinance``.
+Four split shapes, increasing in sophistication:
 
-The pipeline is the same regardless of source: take OHLCV columns, scale
-with ``MinMaxScaler``, and produce ``(X, y)`` where each row in ``X`` is
-one trading day's OHLCV and ``y`` is the *next* day's close.
+  - ``Dataset`` + ``prepare_dataset``                — random shuffle-free
+    train/val split on per-day OHLCV (v1 pipeline).
+  - ``TrainTestSplit`` + ``prepare_train_test_split`` — calendar-date
+    split, scaler fit on train only (v1 crisis test).
+  - ``WindowedReturnsSplit`` + ``prepare_windowed_returns_split`` —
+    30-day windows, per-window z-score, next-day return target
+    (v2 / v3 / v5 pipelines, optionally with technical features).
+  - ``MultiTickerSplit`` + ``prepare_multi_ticker_split`` — windows
+    from many tickers stacked into one combined training set (v4).
 """
 
 from __future__ import annotations
 
-import glob
-import os
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional, Tuple
 
@@ -21,50 +23,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
-FEATURE_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
-DEFAULT_CSV_GLOB = "stock_market_data/sp500/csv/*.csv"
-# Kaggle S&P 500 dump stores dates as DD-MM-YYYY. yfinance returns
-# DatetimeIndex. We accept either.
-DEFAULT_DATE_FORMAT = "%d-%m-%Y"
-
-
-def discover_csv_paths(pattern: str = DEFAULT_CSV_GLOB) -> Dict[str, str]:
-    """Map ticker symbol -> CSV path for every file matching ``pattern``."""
-    paths: Dict[str, str] = {}
-    for file in glob.glob(pattern, recursive=True):
-        ticker = os.path.splitext(os.path.basename(file))[0]
-        paths[ticker] = file
-    return paths
-
-
-def load_csv(path: str, with_dates: bool = False) -> pd.DataFrame:
-    """Load OHLCV from a Kaggle-format CSV.
-
-    With ``with_dates=True``, also parses the ``Date`` column (DD-MM-YYYY)
-    and sets it as the index — needed for date-range filtering.
-    """
-    if not with_dates:
-        return pd.read_csv(path, usecols=FEATURE_COLUMNS)
-    df = pd.read_csv(path, usecols=["Date"] + FEATURE_COLUMNS)
-    df["Date"] = pd.to_datetime(df["Date"], format=DEFAULT_DATE_FORMAT)
-    return df.set_index("Date").sort_index()
-
-
-def slice_by_date(df: pd.DataFrame, start: Optional[str] = None, end: Optional[str] = None) -> pd.DataFrame:
-    """Return rows of ``df`` (DatetimeIndex assumed) within [start, end]."""
-    if start is not None:
-        df = df[df.index >= pd.to_datetime(start)]
-    if end is not None:
-        df = df[df.index <= pd.to_datetime(end)]
-    return df
-
-
-def load_yfinance(ticker: str, period: str = "max") -> pd.DataFrame:
-    """Fetch historical OHLCV via yfinance. Lazy import keeps it optional."""
-    import yfinance as yf
-
-    df = yf.Ticker(ticker).history(period=period)
-    return df[FEATURE_COLUMNS]
+from .loaders import FEATURE_COLUMNS, load_csv, slice_by_date
 
 
 @dataclass
@@ -88,8 +47,8 @@ class TrainTestSplit:
 
     ``y_test_prev`` is the previous trading day's close at each test
     timestep — the input to the persistence baseline and to directional
-    accuracy. ``train_close_min``/``max`` are the price range seen during
-    training, for out-of-range detection on the test set.
+    accuracy. ``train_close_min`` / ``max`` are the price range seen
+    during training, for out-of-range detection on the test set.
     """
     X_train: np.ndarray
     X_test: np.ndarray
@@ -104,6 +63,124 @@ class TrainTestSplit:
     @property
     def input_shape(self) -> int:
         return self.X_train.shape[1]
+
+
+@dataclass
+class WindowedReturnsSplit:
+    """Train/val/test for the windowed-returns pipeline.
+
+    Each input is a ``(window_size, n_features)`` slice; each target is
+    the *next-day simple return* ``(close[t+1] - close[t]) / close[t]``.
+    The window is z-scored per-window per-feature so the model is
+    invariant to absolute price level — handles regime shifts naturally.
+
+    To recover a predicted price from a predicted return:
+        predicted_close[t+1] = close_at_t * (1 + predicted_return)
+    """
+    X_train: np.ndarray
+    X_val: np.ndarray
+    X_test: np.ndarray
+    y_train: np.ndarray
+    y_val: np.ndarray
+    y_test: np.ndarray
+    close_at_t_test: np.ndarray   # close[t] for each test sample
+    actual_close_test: np.ndarray  # close[t+1] — what we're predicting
+    test_index: pd.Index
+    train_close_min: float
+    train_close_max: float
+    window_size: int
+    n_features: int
+
+    @property
+    def input_shape(self) -> Tuple[int, int]:
+        return self.window_size, self.n_features
+
+
+@dataclass
+class MultiTickerSplit:
+    """Combined training set across many tickers + per-ticker test sets.
+
+    The premise: each ticker is just one realisation of "how stocks
+    behave". Train on samples from many tickers to learn the common
+    structure, then evaluate per-ticker on the held-out crisis window.
+
+    All inputs use the same windowed-returns shape (per-window z-score),
+    so a single CNN trained on the combined set can score any test
+    ticker.
+    """
+    X_train: np.ndarray
+    X_val: np.ndarray
+    y_train: np.ndarray
+    y_val: np.ndarray
+    per_ticker_test: Dict[str, "WindowedReturnsSplit"]
+    n_features: int
+    window_size: int
+    train_tickers: list
+    test_tickers: list
+
+    @property
+    def input_shape(self) -> Tuple[int, int]:
+        return self.window_size, self.n_features
+
+
+# -------------------------------- helpers ----------------------------------
+
+
+def _zscore_window(window: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    """Standardise each feature within a single window (axis=0)."""
+    mu = window.mean(axis=0, keepdims=True)
+    sigma = window.std(axis=0, keepdims=True)
+    return (window - mu) / (sigma + eps)
+
+
+def _build_windows(features: np.ndarray, closes: np.ndarray, window_size: int):
+    """Sliding windows + per-window z-score. Returns X, y, close_at_t."""
+    n = len(features)
+    if n < window_size + 1:
+        raise ValueError(f"Need at least {window_size + 1} rows, got {n}")
+
+    n_windows = n - window_size  # last window has no next-day target
+    X = np.empty((n_windows, window_size, features.shape[1]), dtype=np.float32)
+    y = np.empty(n_windows, dtype=np.float32)
+    close_at_t = np.empty(n_windows, dtype=np.float32)
+
+    for i in range(n_windows):
+        window = features[i : i + window_size]
+        X[i] = _zscore_window(window)
+        close_t = closes[i + window_size - 1]
+        close_t1 = closes[i + window_size]
+        y[i] = (close_t1 - close_t) / close_t   # simple return
+        close_at_t[i] = close_t
+    return X, y, close_at_t
+
+
+# ------------------------------ prepare_* ----------------------------------
+
+
+def prepare_dataset(
+    df: pd.DataFrame,
+    test_size: float = 0.2,
+    scaler: Optional[MinMaxScaler] = None,
+) -> Dataset:
+    """Scale features and build the next-day-close supervised problem.
+
+    Used by the v1 pipeline only. The scaler is fit on the WHOLE
+    dataframe, which leaks val-set statistics — kept for backwards
+    compatibility with the original notebook flow. Use
+    :func:`prepare_train_test_split` for any honest backtest.
+    """
+    scaler = scaler if scaler is not None else MinMaxScaler()
+    features = df[FEATURE_COLUMNS]
+
+    X_full = scaler.fit_transform(features)[:-1]
+    y_full = features["Close"].values[1:]
+
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_full, y_full, test_size=test_size, shuffle=False
+    )
+    X_train = X_train[..., np.newaxis]
+    X_val = X_val[..., np.newaxis]
+    return Dataset(X_train, X_val, y_train, y_val, scaler)
 
 
 def prepare_train_test_split(
@@ -155,65 +232,6 @@ def prepare_train_test_split(
     )
 
 
-@dataclass
-class WindowedReturnsSplit:
-    """Train/val/test for the windowed-returns pipeline.
-
-    Each input is a ``(window_size, n_features)`` slice; each target is
-    the *next-day simple return* ``(close[t+1] - close[t]) / close[t]``.
-    The window is z-scored per-window per-feature so the model is
-    invariant to absolute price level — handles regime shifts naturally.
-
-    To recover a predicted price from a predicted return:
-        predicted_close[t+1] = close_at_t * (1 + predicted_return)
-    """
-    X_train: np.ndarray
-    X_val: np.ndarray
-    X_test: np.ndarray
-    y_train: np.ndarray
-    y_val: np.ndarray
-    y_test: np.ndarray
-    close_at_t_test: np.ndarray   # close[t] for each test sample
-    actual_close_test: np.ndarray  # close[t+1] — what we're predicting
-    test_index: pd.Index
-    train_close_min: float
-    train_close_max: float
-    window_size: int
-    n_features: int
-
-    @property
-    def input_shape(self) -> Tuple[int, int]:
-        return self.window_size, self.n_features
-
-
-def _zscore_window(window: np.ndarray, eps: float = 1e-8) -> np.ndarray:
-    """Standardise each feature within a single window (axis=0)."""
-    mu = window.mean(axis=0, keepdims=True)
-    sigma = window.std(axis=0, keepdims=True)
-    return (window - mu) / (sigma + eps)
-
-
-def _build_windows(features: np.ndarray, closes: np.ndarray, window_size: int):
-    """Sliding windows + per-window z-score. Returns X, y, close_at_t."""
-    n = len(features)
-    if n < window_size + 1:
-        raise ValueError(f"Need at least {window_size + 1} rows, got {n}")
-
-    n_windows = n - window_size  # last window has no next-day target
-    X = np.empty((n_windows, window_size, features.shape[1]), dtype=np.float32)
-    y = np.empty(n_windows, dtype=np.float32)
-    close_at_t = np.empty(n_windows, dtype=np.float32)
-
-    for i in range(n_windows):
-        window = features[i : i + window_size]
-        X[i] = _zscore_window(window)
-        close_t = closes[i + window_size - 1]
-        close_t1 = closes[i + window_size]
-        y[i] = (close_t1 - close_t) / close_t   # simple return
-        close_at_t[i] = close_t
-    return X, y, close_at_t
-
-
 def prepare_windowed_returns_split(
     df: pd.DataFrame,
     train_end: str,
@@ -232,26 +250,21 @@ def prepare_windowed_returns_split(
     ``feature_builder`` is an optional callable that takes the OHLCV
     DataFrame and returns a new DataFrame of derived features (e.g.
     :func:`src.features.build_technical_features`). When given, the
-    model is trained on those features instead of raw OHLCV. NaNs
-    produced by the warmup period are dropped.
+    model trains on those features instead of raw OHLCV. NaNs from the
+    warmup period are dropped.
     """
     if not isinstance(df.index, pd.DatetimeIndex):
         raise ValueError("df must have a DatetimeIndex — use load_csv(..., with_dates=True)")
 
     df = df.sort_index()
 
-    # Build features on the FULL history first so warmup straddles the
-    # train/test boundary correctly — otherwise the first ~20 rows of
-    # test would be NaN.
     if feature_builder is not None:
         features_full = feature_builder(df)
         usable = features_full.dropna().index
         df = df.loc[usable]
         feat_df = features_full.loc[usable]
-        feat_cols = list(feat_df.columns)
     else:
         feat_df = df[FEATURE_COLUMNS]
-        feat_cols = FEATURE_COLUMNS
 
     train_full = slice_by_date(df, end=train_end)
     test_df = slice_by_date(df, start=test_start, end=test_end)
@@ -267,15 +280,13 @@ def prepare_windowed_returns_split(
     test_features = feat_df.loc[test_df.index].values.astype(np.float32)
     test_closes = test_df["Close"].values.astype(np.float32)
 
-    X_full, y_full, close_at_t_full = _build_windows(train_features, train_closes, window_size)
+    X_full, y_full, _ = _build_windows(train_features, train_closes, window_size)
 
-    # Internal val = last slice of training (chronological, no shuffle).
     split = int(len(X_full) * (1 - internal_val_fraction))
     X_train, X_val = X_full[:split], X_full[split:]
     y_train, y_val = y_full[:split], y_full[split:]
 
     X_test, y_test, close_at_t_test = _build_windows(test_features, test_closes, window_size)
-    # actual_close_test[i] = close[t+1] where t is the last day in window i
     actual_close_test = close_at_t_test * (1 + y_test)
     test_index = test_df.index[window_size:]
 
@@ -290,33 +301,6 @@ def prepare_windowed_returns_split(
         window_size=window_size,
         n_features=train_features.shape[1],
     )
-
-
-@dataclass
-class MultiTickerSplit:
-    """Combined training set across many tickers + per-ticker test sets.
-
-    The premise: each ticker is just one realisation of "how stocks
-    behave". Train on samples from many tickers to learn the common
-    structure, then evaluate per-ticker on the held-out crisis window.
-
-    All inputs use the same windowed-returns shape (per-window z-score),
-    so a single CNN trained on the combined set can score any test
-    ticker.
-    """
-    X_train: np.ndarray
-    X_val: np.ndarray
-    y_train: np.ndarray
-    y_val: np.ndarray
-    per_ticker_test: Dict[str, "WindowedReturnsSplit"]
-    n_features: int
-    window_size: int
-    train_tickers: list
-    test_tickers: list
-
-    @property
-    def input_shape(self) -> Tuple[int, int]:
-        return self.window_size, self.n_features
 
 
 def prepare_multi_ticker_split(
@@ -387,8 +371,9 @@ def prepare_multi_ticker_split(
     X_val = np.concatenate(val_X_chunks, axis=0)
     y_val = np.concatenate(val_y_chunks, axis=0)
 
-    # Clip extreme target returns. Daily moves > 20% are almost always
-    # data artefacts (splits/IPO/bad rows) and they trash MSE training.
+    # Clip extreme target returns. Daily moves > target_clip are almost
+    # always data artefacts (splits / IPO / bad rows) and they trash MSE
+    # training.
     if target_clip is not None:
         n_clipped_train = int(((np.abs(y_train) > target_clip)).sum())
         n_clipped_val = int(((np.abs(y_val) > target_clip)).sum())
@@ -413,28 +398,3 @@ def prepare_multi_ticker_split(
         train_tickers=train_tickers,
         test_tickers=[t for t in test_tickers if t in per_ticker_test],
     )
-
-
-def prepare_dataset(
-    df: pd.DataFrame,
-    test_size: float = 0.2,
-    scaler: Optional[MinMaxScaler] = None,
-) -> Dataset:
-    """Scale features and build the next-day-close supervised problem.
-
-    Each input row is one day's OHLCV; the target is the *next* day's
-    raw (unscaled) close. We deliberately train on raw target values to
-    keep MAE/MAPE interpretable in dollars.
-    """
-    scaler = scaler if scaler is not None else MinMaxScaler()
-    features = df[FEATURE_COLUMNS]
-
-    X_full = scaler.fit_transform(features)[:-1]
-    y_full = features["Close"].values[1:]
-
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_full, y_full, test_size=test_size, shuffle=False
-    )
-    X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
-    X_val = X_val.reshape(X_val.shape[0], X_val.shape[1], 1)
-    return Dataset(X_train, X_val, y_train, y_val, scaler)

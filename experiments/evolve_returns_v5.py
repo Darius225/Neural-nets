@@ -36,7 +36,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 
 from src.configs import EvolutionConfig, RETURNS_CNN_RANGES, ReturnsCNNConfig
 from src.data import load_csv, prepare_windowed_returns_split
-from src.evolution import one_plus_one_es
+from src.search.evolution import one_plus_one_es
 from src.features import build_technical_features
 from src.metrics import compute_metrics, naive_persistence_forecast
 from src.models import build_returns_cnn

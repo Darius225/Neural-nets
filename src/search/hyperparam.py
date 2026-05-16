@@ -22,10 +22,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import tensorflow as tf
 
-from .data import Dataset
+from ..data import Dataset
+from ..models import HYPERPARAMETER_RANGES, build_general_cnn
+from ..training import train_on_prepared
 from .evolution import memoize_by
-from .models import HYPERPARAMETER_RANGES, build_general_cnn
-from .training import train_on_prepared
 
 Individual = Dict[str, Any]
 _CacheKey = Tuple[Tuple[str, Any], ...]

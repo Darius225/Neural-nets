@@ -7,8 +7,8 @@ counting, consider() acceptance, mutate validity)."""
 import pytest
 
 from src.configs import RETURNS_CNN_RANGES, EvolutionConfig, ReturnsCNNConfig
-from src.evolution import EvolutionResult, memoize_by, mutate_config, one_plus_one_es, random_config
-from src.hyperparam_search import SearchHistory
+from src.search.evolution import EvolutionResult, memoize_by, mutate_config, one_plus_one_es, random_config
+from src.search.hyperparam import SearchHistory
 from random import Random
 
 
