@@ -1,5 +1,8 @@
 # CNN Stock Predictor — an honest backtest
 
+[![tests](https://github.com/darius225/Neural-nets/actions/workflows/test.yml/badge.svg)](https://github.com/darius225/Neural-nets/actions/workflows/test.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A CNN-based next-day close predictor for US equities, plus the
 methodology and experiments needed to know whether it actually works.
 The headline finding: at daily resolution, OHLCV-derived features
