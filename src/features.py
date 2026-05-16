@@ -92,5 +92,3 @@ def build_technical_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Final safety net: replace any inf with NaN so dropna() handles them.
     return out.replace([np.inf, -np.inf], np.nan)
-
-

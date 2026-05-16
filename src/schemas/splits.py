@@ -13,7 +13,6 @@ to check on an ndarray and would only add construction overhead.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -44,6 +43,7 @@ class TrainTestSplit:
     accuracy. ``train_close_min`` / ``max`` are the price range seen
     during training, for out-of-range detection on the test set.
     """
+
     X_train: np.ndarray
     X_test: np.ndarray
     y_train: np.ndarray
@@ -71,13 +71,14 @@ class WindowedReturnsSplit:
     To recover a predicted price from a predicted return:
         predicted_close[t+1] = close_at_t * (1 + predicted_return)
     """
+
     X_train: np.ndarray
     X_val: np.ndarray
     X_test: np.ndarray
     y_train: np.ndarray
     y_val: np.ndarray
     y_test: np.ndarray
-    close_at_t_test: np.ndarray   # close[t] for each test sample
+    close_at_t_test: np.ndarray  # close[t] for each test sample
     actual_close_test: np.ndarray  # close[t+1] — what we're predicting
     test_index: pd.Index
     train_close_min: float
@@ -86,7 +87,7 @@ class WindowedReturnsSplit:
     n_features: int
 
     @property
-    def input_shape(self) -> Tuple[int, int]:
+    def input_shape(self) -> tuple[int, int]:
         return self.window_size, self.n_features
 
 
@@ -98,12 +99,12 @@ class MultiTickerSplit:
     X_val: np.ndarray
     y_train: np.ndarray
     y_val: np.ndarray
-    per_ticker_test: Dict[str, WindowedReturnsSplit]
+    per_ticker_test: dict[str, WindowedReturnsSplit]
     n_features: int
     window_size: int
     train_tickers: list
     test_tickers: list
 
     @property
-    def input_shape(self) -> Tuple[int, int]:
+    def input_shape(self) -> tuple[int, int]:
         return self.window_size, self.n_features

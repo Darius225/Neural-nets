@@ -30,14 +30,13 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.callbacks import EarlyStopping
 
-from src.configs import EvolutionConfig, RETURNS_CNN_RANGES, ReturnsCNNConfig
+from src.configs import RETURNS_CNN_RANGES, EvolutionConfig, ReturnsCNNConfig
 from src.data import load_csv
 from src.data.splits import _build_windows, _zscore_window
 from src.features import build_technical_features
-from src.metrics import compute_metrics, naive_persistence_forecast
+from src.metrics import compute_metrics
 from src.models import build_returns_cnn
 from src.search.evolution import one_plus_one_es
-
 
 ETH_CSV = Path("stock_market_data/crypto/csv/ETHUSDT.csv")
 BTC_CSV = Path("stock_market_data/crypto/csv/BTCUSDT.csv")
@@ -58,10 +57,13 @@ ES = EvolutionConfig(max_iterations=20, mutation_probability=0.3, reset_threshol
 
 
 def set_seed(s: int) -> None:
-    np.random.seed(s); tf.random.set_seed(s)
+    np.random.seed(s)
+    tf.random.set_seed(s)
 
 
-def build_combined_features(eth_df: pd.DataFrame, btc_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+def build_combined_features(
+    eth_df: pd.DataFrame, btc_df: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.Series]:
     """ETH features + BTC features (prefixed) on the date intersection."""
     eth_f = build_technical_features(eth_df)
     btc_f = build_technical_features(btc_df)
@@ -73,8 +75,7 @@ def build_combined_features(eth_df: pd.DataFrame, btc_df: pd.DataFrame) -> tuple
     return combined, closes
 
 
-def build_windows_for_range(features: pd.DataFrame, closes: pd.Series,
-                            start: str, end: str):
+def build_windows_for_range(features: pd.DataFrame, closes: pd.Series, start: str, end: str):
     """Slice by date then build windows + targets."""
     mask = (features.index >= pd.to_datetime(start)) & (features.index <= pd.to_datetime(end))
     feat_arr = features.loc[mask].values.astype(np.float32)
@@ -90,16 +91,18 @@ def build_windows_for_range(features: pd.DataFrame, closes: pd.Series,
     return X, y, close_at_t, test_index
 
 
-def train(X_train, y_train, X_val, y_val, config: ReturnsCNNConfig,
-          epochs: int, patience: int):
+def train(X_train, y_train, X_val, y_val, config: ReturnsCNNConfig, epochs: int, patience: int):
     tf.keras.backend.clear_session()
     set_seed(SEED)
     model = build_returns_cnn(WINDOW_SIZE, X_train.shape[2], config=config)
     hist = model.fit(
-        X_train, y_train, validation_data=(X_val, y_val),
-        epochs=epochs, batch_size=BATCH_SIZE, verbose=0,
-        callbacks=[EarlyStopping(monitor="val_loss", patience=patience,
-                                 restore_best_weights=True)],
+        X_train,
+        y_train,
+        validation_data=(X_val, y_val),
+        epochs=epochs,
+        batch_size=BATCH_SIZE,
+        verbose=0,
+        callbacks=[EarlyStopping(monitor="val_loss", patience=patience, restore_best_weights=True)],
     )
     return model, hist.history
 
@@ -132,13 +135,18 @@ def main() -> None:
     eth_df = load_csv(str(ETH_CSV), with_dates=True)
     btc_df = load_csv(str(BTC_CSV), with_dates=True)
     features, closes = build_combined_features(eth_df, btc_df)
-    print(f"  combined features: {features.shape[1]} cols, "
-          f"{features.index[0].date()} .. {features.index[-1].date()}, "
-          f"{len(features)} rows")
+    print(
+        f"  combined features: {features.shape[1]} cols, "
+        f"{features.index[0].date()} .. {features.index[-1].date()}, "
+        f"{len(features)} rows"
+    )
 
     # PHASE 1 — ES on train (up to 2024) with val on 2025+ ----------------
-    X_full, y_full, c_full, _ = build_windows_for_range(
-        features, closes, "1900-01-01", SEARCH_TRAIN_END,
+    X_full, y_full, _c_full, _ = build_windows_for_range(
+        features,
+        closes,
+        "1900-01-01",
+        SEARCH_TRAIN_END,
     )
     val_cut = int(len(X_full) * 0.85)
     X_tr, X_val = X_full[:val_cut], X_full[val_cut:]
@@ -150,37 +158,53 @@ def main() -> None:
         return float(min(h["val_loss"]))
 
     result = one_plus_one_es(
-        ReturnsCNNConfig, RETURNS_CNN_RANGES, fitness, ES,
+        ReturnsCNNConfig,
+        RETURNS_CNN_RANGES,
+        fitness,
+        ES,
         initial=ReturnsCNNConfig(dropout=0.4, huber_delta=0.01, learning_rate=2e-3),
     )
-    print(f"\n  ES: {result.wall_time_s:.1f}s, {result.evaluations} evals, "
-          f"best val_loss={result.best_fitness:.6f}")
+    print(
+        f"\n  ES: {result.wall_time_s:.1f}s, {result.evaluations} evals, "
+        f"best val_loss={result.best_fitness:.6f}"
+    )
     print(f"  best config: {result.best_config.model_dump()}")
 
     # Score on the held-out 2025+ window with the BEST config.
-    X_test, y_test, c_test, test_idx = build_windows_for_range(
-        features, closes, SEARCH_TEST_START, SEARCH_TEST_END,
+    X_test, y_test, c_test, _test_idx = build_windows_for_range(
+        features,
+        closes,
+        SEARCH_TEST_START,
+        SEARCH_TEST_END,
     )
-    model, _ = train(X_tr, y_tr, X_val, y_val, result.best_config,
-                     SEARCH_EPOCHS, SEARCH_PATIENCE)
+    model, _ = train(X_tr, y_tr, X_val, y_val, result.best_config, SEARCH_EPOCHS, SEARCH_PATIENCE)
     m, pred_r, corr = evaluate(model, X_test, y_test, c_test)
-    print(f"\n  OOS on {SEARCH_TEST_START}..{SEARCH_TEST_END} "
-          f"({len(y_test)} {HORIZON}-day windows):")
+    print(
+        f"\n  OOS on {SEARCH_TEST_START}..{SEARCH_TEST_END} ({len(y_test)} {HORIZON}-day windows):"
+    )
     print(f"    MAE=${m.mae:.2f}  RMSE=${m.rmse:.2f}  DirAcc={m.directional_accuracy:.1f}%")
-    print(f"    skill_vs_persistence={m.skill_vs_persistence:+.4f}  "
-          f"corr(pred,act)={corr:+.4f}")
-    print(f"    pred std / actual std = {pred_r.std()/y_test.std():.3f}")
+    print(f"    skill_vs_persistence={m.skill_vs_persistence:+.4f}  corr(pred,act)={corr:+.4f}")
+    print(f"    pred std / actual std = {pred_r.std() / y_test.std():.3f}")
 
     # PHASE 2 — retrain on ALL data ----------------------------------------
     X_all, y_all, _, _ = build_windows_for_range(
-        features, closes, "1900-01-01", str(features.index[-1].date()),
+        features,
+        closes,
+        "1900-01-01",
+        str(features.index[-1].date()),
     )
     cut = int(len(X_all) * 0.85)
     print(f"\nPHASE 2 — retrain on ALL data ({cut} train + {len(X_all) - cut} val)")
-    final_model, h2 = train(X_all[:cut], y_all[:cut], X_all[cut:], y_all[cut:],
-                            result.best_config, FINAL_EPOCHS, FINAL_PATIENCE)
-    print(f"  trained {len(h2['loss'])} epochs, "
-          f"best val_loss={min(h2['val_loss']):.6f}")
+    final_model, h2 = train(
+        X_all[:cut],
+        y_all[:cut],
+        X_all[cut:],
+        y_all[cut:],
+        result.best_config,
+        FINAL_EPOCHS,
+        FINAL_PATIENCE,
+    )
+    print(f"  trained {len(h2['loss'])} epochs, best val_loss={min(h2['val_loss']):.6f}")
 
     # PHASE 3 — predict 5 days ahead ---------------------------------------
     last_window = features.iloc[-WINDOW_SIZE:].values.astype(np.float32)

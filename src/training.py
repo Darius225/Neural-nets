@@ -7,7 +7,8 @@ Replaces the duplicated ``manual_training_for_company`` and
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 import pandas as pd
 from tensorflow.keras import Model
@@ -28,11 +29,11 @@ def train_on_prepared(
     dataset: Dataset,
     *,
     model_factory: ModelFactory = build_best_cnn,
-    params: Optional[Dict[str, Any]] = None,
+    params: dict[str, Any] | None = None,
     epochs: int = DEFAULT_EPOCHS,
     batch_size: int = DEFAULT_BATCH_SIZE,
     plot: bool = False,
-    early_stopping_patience: Optional[int] = None,
+    early_stopping_patience: int | None = None,
     verbose: int = 0,
 ) -> TrainingResult:
     """Train on an already-prepared ``Dataset``.
@@ -75,12 +76,12 @@ def train(
     df: pd.DataFrame,
     *,
     model_factory: ModelFactory = build_best_cnn,
-    params: Optional[Dict[str, Any]] = None,
+    params: dict[str, Any] | None = None,
     epochs: int = DEFAULT_EPOCHS,
     batch_size: int = DEFAULT_BATCH_SIZE,
     test_size: float = 0.2,
     plot: bool = False,
-    early_stopping_patience: Optional[int] = None,
+    early_stopping_patience: int | None = None,
     verbose: int = 0,
 ) -> TrainingResult:
     """Prepare the dataset from ``df`` and train. Thin wrapper around
@@ -101,7 +102,7 @@ def train(
 
 def train_on_ticker(
     ticker: str,
-    csv_paths: Dict[str, str],
+    csv_paths: dict[str, str],
     **kwargs: Any,
 ) -> TrainingResult:
     """Convenience wrapper: train on a local CSV identified by ticker."""
@@ -112,11 +113,11 @@ def train_on_ticker(
 
 
 __all__ = [
-    "train",
-    "train_on_ticker",
+    "DEFAULT_BATCH_SIZE",
+    "DEFAULT_EPOCHS",
     "TrainingResult",
     "build_best_cnn",
     "build_general_cnn",
-    "DEFAULT_EPOCHS",
-    "DEFAULT_BATCH_SIZE",
+    "train",
+    "train_on_ticker",
 ]

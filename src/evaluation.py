@@ -8,7 +8,7 @@ callers can keep both predictions and computed errors.
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd

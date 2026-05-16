@@ -10,7 +10,8 @@ you want :func:`functools.cache` semantics on an unhashable argument.
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable, Hashable, TypeVar
+from collections.abc import Callable, Hashable
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
@@ -29,6 +30,7 @@ def memoize_by(key_fn: Callable[[Any], Hashable], *, enabled: bool = True):
     Pass a ``key_fn`` that projects the argument to something hashable
     (typically a sorted tuple of items).
     """
+
     def decorator(fn: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(fn)
         def wrapper(arg, *rest, **kwargs):
@@ -48,4 +50,5 @@ def memoize_by(key_fn: Callable[[Any], Hashable], *, enabled: bool = True):
         wrapper.hits = 0
         wrapper.misses = 0
         return wrapper
+
     return decorator

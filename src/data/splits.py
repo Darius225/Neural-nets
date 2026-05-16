@@ -11,7 +11,7 @@ dataclasses defined in :mod:`src.schemas.splits`:
 
 from __future__ import annotations
 
-from typing import Callable, Dict, Optional
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -26,7 +26,6 @@ from ..schemas.splits import (
 )
 from .loaders import FEATURE_COLUMNS, load_csv, slice_by_date
 
-
 # -------------------------------- helpers ----------------------------------
 
 
@@ -37,8 +36,7 @@ def _zscore_window(window: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     return (window - mu) / (sigma + eps)
 
 
-def _build_windows(features: np.ndarray, closes: np.ndarray, window_size: int,
-                   horizon: int = 1):
+def _build_windows(features: np.ndarray, closes: np.ndarray, window_size: int, horizon: int = 1):
     """Sliding windows + per-window z-score. Returns X, y, close_at_t.
 
     ``horizon`` is the forecast horizon in days — ``y[i]`` is the simple
@@ -49,8 +47,9 @@ def _build_windows(features: np.ndarray, closes: np.ndarray, window_size: int,
     n = len(features)
     needed = window_size + horizon
     if n < needed:
-        raise ValueError(f"Need at least {needed} rows for window={window_size}, "
-                         f"horizon={horizon}; got {n}")
+        raise ValueError(
+            f"Need at least {needed} rows for window={window_size}, horizon={horizon}; got {n}"
+        )
 
     n_windows = n - window_size - horizon + 1
     X = np.empty((n_windows, window_size, features.shape[1]), dtype=np.float32)
@@ -62,7 +61,7 @@ def _build_windows(features: np.ndarray, closes: np.ndarray, window_size: int,
         X[i] = _zscore_window(window)
         close_t = closes[i + window_size - 1]
         close_th = closes[i + window_size - 1 + horizon]
-        y[i] = (close_th - close_t) / close_t   # H-day simple return
+        y[i] = (close_th - close_t) / close_t  # H-day simple return
         close_at_t[i] = close_t
     return X, y, close_at_t
 
@@ -73,7 +72,7 @@ def _build_windows(features: np.ndarray, closes: np.ndarray, window_size: int,
 def prepare_dataset(
     df: pd.DataFrame,
     test_size: float = 0.2,
-    scaler: Optional[MinMaxScaler] = None,
+    scaler: MinMaxScaler | None = None,
 ) -> Dataset:
     """Scale features and build the next-day-close supervised problem.
 
@@ -100,7 +99,7 @@ def prepare_train_test_split(
     df: pd.DataFrame,
     train_end: str,
     test_start: str,
-    test_end: Optional[str] = None,
+    test_end: str | None = None,
 ) -> TrainTestSplit:
     """Build a train/test pair using explicit calendar dates.
 
@@ -149,10 +148,10 @@ def prepare_windowed_returns_split(
     df: pd.DataFrame,
     train_end: str,
     test_start: str,
-    test_end: Optional[str] = None,
+    test_end: str | None = None,
     window_size: int = 30,
     internal_val_fraction: float = 0.15,
-    feature_builder: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None,
+    feature_builder: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     horizon: int = 1,
 ) -> WindowedReturnsSplit:
     """Build a (train, internal_val, test) split for windowed-returns training.
@@ -207,14 +206,21 @@ def prepare_windowed_returns_split(
     y_train, y_val = y_full[:split], y_full[split:]
 
     X_test, y_test, close_at_t_test = _build_windows(
-        test_features, test_closes, window_size, horizon=horizon,
+        test_features,
+        test_closes,
+        window_size,
+        horizon=horizon,
     )
     actual_close_test = close_at_t_test * (1 + y_test)
     test_index = test_df.index[window_size + horizon - 1 : window_size + horizon - 1 + len(X_test)]
 
     return WindowedReturnsSplit(
-        X_train=X_train, X_val=X_val, X_test=X_test,
-        y_train=y_train, y_val=y_val, y_test=y_test,
+        X_train=X_train,
+        X_val=X_val,
+        X_test=X_test,
+        y_train=y_train,
+        y_val=y_val,
+        y_test=y_test,
         close_at_t_test=close_at_t_test,
         actual_close_test=actual_close_test,
         test_index=test_index,
@@ -226,17 +232,17 @@ def prepare_windowed_returns_split(
 
 
 def prepare_multi_ticker_split(
-    csv_paths: Dict[str, str],
+    csv_paths: dict[str, str],
     train_end: str,
     test_start: str,
-    test_end: Optional[str],
+    test_end: str | None,
     test_tickers: list,
     window_size: int = 30,
     internal_val_fraction: float = 0.15,
-    feature_builder: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None,
+    feature_builder: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     min_pre_train_rows: int = 200,
-    max_train_tickers: Optional[int] = None,
-    target_clip: Optional[float] = 0.2,
+    max_train_tickers: int | None = None,
+    target_clip: float | None = 0.2,
     verbose: bool = True,
 ) -> MultiTickerSplit:
     """Build a combined multi-ticker training set + per-ticker test sets.
@@ -249,7 +255,7 @@ def prepare_multi_ticker_split(
     """
     train_X_chunks, train_y_chunks = [], []
     val_X_chunks, val_y_chunks = [], []
-    per_ticker_test: Dict[str, WindowedReturnsSplit] = {}
+    per_ticker_test: dict[str, WindowedReturnsSplit] = {}
     train_tickers: list = []
     skipped = 0
 
@@ -269,8 +275,12 @@ def prepare_multi_ticker_split(
                 skipped += 1
                 continue
             split = prepare_windowed_returns_split(
-                df, train_end=train_end, test_start=test_start, test_end=test_end,
-                window_size=window_size, internal_val_fraction=internal_val_fraction,
+                df,
+                train_end=train_end,
+                test_start=test_start,
+                test_end=test_end,
+                window_size=window_size,
+                internal_val_fraction=internal_val_fraction,
                 feature_builder=feature_builder,
             )
             train_X_chunks.append(split.X_train)
@@ -297,23 +307,29 @@ def prepare_multi_ticker_split(
     # always data artefacts (splits / IPO / bad rows) and they trash MSE
     # training.
     if target_clip is not None:
-        n_clipped_train = int(((np.abs(y_train) > target_clip)).sum())
-        n_clipped_val = int(((np.abs(y_val) > target_clip)).sum())
+        n_clipped_train = int((np.abs(y_train) > target_clip).sum())
+        n_clipped_val = int((np.abs(y_val) > target_clip).sum())
         y_train = np.clip(y_train, -target_clip, target_clip)
         y_val = np.clip(y_val, -target_clip, target_clip)
         if verbose and (n_clipped_train or n_clipped_val):
-            print(f"  clipped {n_clipped_train} train + {n_clipped_val} val targets "
-                  f"to +-{target_clip} (likely splits/IPO data artefacts)")
+            print(
+                f"  clipped {n_clipped_train} train + {n_clipped_val} val targets "
+                f"to +-{target_clip} (likely splits/IPO data artefacts)"
+            )
 
     if verbose:
-        print(f"  built combined training set: {len(X_train):,} train windows, "
-              f"{len(X_val):,} val windows from {len(train_tickers)} tickers "
-              f"({skipped} skipped)")
+        print(
+            f"  built combined training set: {len(X_train):,} train windows, "
+            f"{len(X_val):,} val windows from {len(train_tickers)} tickers "
+            f"({skipped} skipped)"
+        )
         print(f"  per-ticker test sets ready for: {sorted(per_ticker_test)}")
 
     return MultiTickerSplit(
-        X_train=X_train, X_val=X_val,
-        y_train=y_train, y_val=y_val,
+        X_train=X_train,
+        X_val=X_val,
+        y_train=y_train,
+        y_val=y_val,
         per_ticker_test=per_ticker_test,
         n_features=X_train.shape[2],
         window_size=window_size,

@@ -4,12 +4,19 @@ We deliberately don't run real model trainings here — those belong in
 the experiments/ scripts. These tests pin the *plumbing* (cache
 counting, consider() acceptance, mutate validity)."""
 
+from random import Random
+
 import pytest
 
 from src.configs import RETURNS_CNN_RANGES, EvolutionConfig, ReturnsCNNConfig
-from src.search.evolution import EvolutionResult, memoize_by, mutate_config, one_plus_one_es, random_config
+from src.search.evolution import (
+    EvolutionResult,
+    memoize_by,
+    mutate_config,
+    one_plus_one_es,
+    random_config,
+)
 from src.search.hyperparam import SearchHistory
-from random import Random
 
 
 class TestMemoizeBy:
@@ -154,19 +161,24 @@ class TestRandomMutate:
             assert mutated.model_dump() != cfg.model_dump()
 
     def test_pydantic_rejects_out_of_bounds(self):
-        with pytest.raises(Exception):  # ValidationError
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
             ReturnsCNNConfig(dropout=1.5)
 
 
 class TestESDriver:
     def test_es_minimises_simple_objective(self):
         """ES on a synthetic landscape should converge close to the optimum."""
+
         # Optimum: dropout=0.1, conv1_filters=128 (both extreme values in ranges)
         def fitness(cfg: ReturnsCNNConfig) -> float:
             return cfg.dropout + 1.0 / cfg.conv1_filters
 
         result = one_plus_one_es(
-            ReturnsCNNConfig, RETURNS_CNN_RANGES, fitness,
+            ReturnsCNNConfig,
+            RETURNS_CNN_RANGES,
+            fitness,
             EvolutionConfig(max_iterations=30, verbose=False, seed=0),
         )
         # Should at least beat what a random initial would give on this landscape

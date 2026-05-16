@@ -14,8 +14,6 @@ the model is genuinely doing better than just echoing yesterday's close.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from .schemas.metrics import PredictionMetrics
@@ -58,9 +56,9 @@ def skill_score(mse_model: float, mse_baseline: float) -> float:
 def compute_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-    y_prev: Optional[np.ndarray] = None,
-    train_min: Optional[float] = None,
-    train_max: Optional[float] = None,
+    y_prev: np.ndarray | None = None,
+    train_min: float | None = None,
+    train_max: float | None = None,
 ) -> PredictionMetrics:
     """Compute the full metric bundle.
 
@@ -77,13 +75,13 @@ def compute_metrics(
     residual = y_pred - y_true
 
     mae = float(np.mean(np.abs(residual)))
-    mse = float(np.mean(residual ** 2))
+    mse = float(np.mean(residual**2))
     rmse = float(np.sqrt(mse))
     mape = float(np.mean(np.abs(residual / y_true)) * 100)
     mean_signed = float(np.mean(residual))
     worst = float(np.max(np.abs(residual)))
 
-    ss_res = np.sum(residual ** 2)
+    ss_res = np.sum(residual**2)
     ss_tot = np.sum((y_true - y_true.mean()) ** 2)
     r2 = float(1 - ss_res / ss_tot) if ss_tot > 0 else float("nan")
 

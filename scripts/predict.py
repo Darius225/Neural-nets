@@ -91,8 +91,10 @@ def main() -> None:
     print(f"predicted return: {pred_return:+.4%}")
     print(f"predicted close:  ${pred_price:.4f}  (next trading day)")
     print()
-    print("note: experimental skill score vs persistence is near zero — "
-          "treat as a methodology demo, not a trading signal.")
+    print(
+        "note: experimental skill score vs persistence is near zero — "
+        "treat as a methodology demo, not a trading signal."
+    )
 
 
 if __name__ == "__main__":

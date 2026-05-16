@@ -10,8 +10,6 @@ sign errors in metric computation.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -23,6 +21,7 @@ class PredictionMetrics(BaseModel):
     a metrics snapshot semantically can't be mutated after the report
     it was written to is on disk.
     """
+
     model_config = ConfigDict(frozen=True)
 
     n: int = Field(ge=0)
@@ -33,8 +32,8 @@ class PredictionMetrics(BaseModel):
     directional_accuracy: float
     mean_signed_error: float
     worst_day_error: float = Field(ge=0)
-    skill_vs_persistence: Optional[float] = None
-    out_of_train_range_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    skill_vs_persistence: float | None = None
+    out_of_train_range_pct: float | None = Field(default=None, ge=0, le=100)
 
     def as_row(self) -> dict:
         return {
@@ -46,8 +45,10 @@ class PredictionMetrics(BaseModel):
             "DirAcc%": round(self.directional_accuracy, 2),
             "MeanSignedErr": round(self.mean_signed_error, 4),
             "WorstDayErr": round(self.worst_day_error, 4),
-            "Skill_vs_persist": None if self.skill_vs_persistence is None
-                else round(self.skill_vs_persistence, 4),
-            "OutOfRange%": None if self.out_of_train_range_pct is None
-                else round(self.out_of_train_range_pct, 2),
+            "Skill_vs_persist": None
+            if self.skill_vs_persistence is None
+            else round(self.skill_vs_persistence, 4),
+            "OutOfRange%": None
+            if self.out_of_train_range_pct is None
+            else round(self.out_of_train_range_pct, 2),
         }

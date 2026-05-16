@@ -37,14 +37,14 @@ class TestDirectionalAccuracy:
     def test_perfect_directional_match(self):
         # actual goes up/down/up; predictions agree on direction (not magnitude)
         prev = np.array([100, 100, 100])
-        actual = np.array([105, 95, 110])    # up, down, up
-        pred = np.array([101, 99, 200])      # up, down, up
+        actual = np.array([105, 95, 110])  # up, down, up
+        pred = np.array([101, 99, 200])  # up, down, up
         assert directional_accuracy(actual, pred, prev) == 100.0
 
     def test_zero_directional_match(self):
         prev = np.array([100, 100, 100])
-        actual = np.array([105, 95, 110])    # up, down, up
-        pred = np.array([99, 105, 90])       # down, up, down
+        actual = np.array([105, 95, 110])  # up, down, up
+        pred = np.array([99, 105, 90])  # down, up, down
         assert directional_accuracy(actual, pred, prev) == 0.0
 
     def test_persistence_baseline_yields_nan(self):
@@ -57,8 +57,8 @@ class TestDirectionalAccuracy:
 
     def test_partial_match(self):
         prev = np.array([100, 100, 100, 100])
-        actual = np.array([105, 95, 110, 90])   # up, down, up, down
-        pred = np.array([101, 99, 99, 105])     # up, down, down, up — 2/4 = 50%
+        actual = np.array([105, 95, 110, 90])  # up, down, up, down
+        pred = np.array([101, 99, 99, 105])  # up, down, down, up — 2/4 = 50%
         assert directional_accuracy(actual, pred, prev) == 50.0
 
 
@@ -141,8 +141,13 @@ class TestComputeMetrics:
 
         with pytest.raises(ValidationError):
             PredictionMetrics(
-                n=3, mae=-0.1, rmse=0.0, mape=0.0, r2=1.0,
-                directional_accuracy=50.0, mean_signed_error=0.0,
+                n=3,
+                mae=-0.1,
+                rmse=0.0,
+                mape=0.0,
+                r2=1.0,
+                directional_accuracy=50.0,
+                mean_signed_error=0.0,
                 worst_day_error=0.0,
             )
 
@@ -161,9 +166,18 @@ class TestComputeMetrics:
         m = compute_metrics(np.array([1.0, 2.0]), np.array([1.1, 1.9]))
         row = m.as_row()
 
-        for key in ("n", "MAE", "RMSE", "MAPE%", "R2", "DirAcc%",
-                    "MeanSignedErr", "WorstDayErr",
-                    "Skill_vs_persist", "OutOfRange%"):
+        for key in (
+            "n",
+            "MAE",
+            "RMSE",
+            "MAPE%",
+            "R2",
+            "DirAcc%",
+            "MeanSignedErr",
+            "WorstDayErr",
+            "Skill_vs_persist",
+            "OutOfRange%",
+        ):
             assert key in row, f"missing key {key}"
 
         # Spot-check the actual values too — the rounding alone is non-trivial.

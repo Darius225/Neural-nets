@@ -30,25 +30,23 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
-import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.callbacks import EarlyStopping
 
-from src.configs import EvolutionConfig, RETURNS_CNN_RANGES, ReturnsCNNConfig
+from src.configs import RETURNS_CNN_RANGES, EvolutionConfig, ReturnsCNNConfig
 from src.data import load_csv, prepare_windowed_returns_split
-from src.search.evolution import one_plus_one_es
 from src.features import build_technical_features
 from src.metrics import compute_metrics, naive_persistence_forecast
 from src.models import build_returns_cnn
-
+from src.search.evolution import one_plus_one_es
 
 TEST_TICKERS = ["JPM", "BAC", "C", "MSFT", "AAPL", "IBM", "JNJ", "PG", "GE", "XOM"]
-PROXY_TICKER = "JPM"   # used only for the search phase
+PROXY_TICKER = "JPM"  # used only for the search phase
 TRAIN_END = "2007-07-31"
 TEST_START = "2007-08-01"
 TEST_END = "2009-12-31"
 WINDOW_SIZE = 30
-SEARCH_EPOCHS = 25       # short — we're scoring configs, not optimising final fit
+SEARCH_EPOCHS = 25  # short — we're scoring configs, not optimising final fit
 SEARCH_PATIENCE = 4
 VALIDATE_EPOCHS = 60
 VALIDATE_PATIENCE = 8
@@ -65,8 +63,12 @@ def set_seed(s: int) -> None:
 def load_split(ticker: str):
     df = load_csv(f"{CSV_DIR}/{ticker}.csv", with_dates=True)
     return prepare_windowed_returns_split(
-        df, train_end=TRAIN_END, test_start=TEST_START, test_end=TEST_END,
-        window_size=WINDOW_SIZE, feature_builder=build_technical_features,
+        df,
+        train_end=TRAIN_END,
+        test_start=TEST_START,
+        test_end=TEST_END,
+        window_size=WINDOW_SIZE,
+        feature_builder=build_technical_features,
     )
 
 
@@ -75,11 +77,13 @@ def train_one(split, config: ReturnsCNNConfig, epochs: int, patience: int):
     set_seed(ES.seed)
     model = build_returns_cnn(split.window_size, split.n_features, config=config)
     hist = model.fit(
-        split.X_train, split.y_train,
+        split.X_train,
+        split.y_train,
         validation_data=(split.X_val, split.y_val),
-        epochs=epochs, batch_size=BATCH_SIZE, verbose=0,
-        callbacks=[EarlyStopping(monitor="val_loss", patience=patience,
-                                 restore_best_weights=True)],
+        epochs=epochs,
+        batch_size=BATCH_SIZE,
+        verbose=0,
+        callbacks=[EarlyStopping(monitor="val_loss", patience=patience, restore_best_weights=True)],
     )
     return model, hist.history
 
@@ -104,11 +108,16 @@ def phase1_search(proxy_split) -> ReturnsCNNConfig:
         return float(min(history["val_loss"]))
 
     result = one_plus_one_es(
-        ReturnsCNNConfig, RETURNS_CNN_RANGES, fitness, ES,
+        ReturnsCNNConfig,
+        RETURNS_CNN_RANGES,
+        fitness,
+        ES,
         initial=ReturnsCNNConfig(),  # start from the v2/v3/v4 default
     )
-    print(f"\n  search done in {result.wall_time_s:.1f}s, "
-          f"{result.evaluations} evals ({result.cache_hits} cache hits)")
+    print(
+        f"\n  search done in {result.wall_time_s:.1f}s, "
+        f"{result.evaluations} evals ({result.cache_hits} cache hits)"
+    )
     print(f"  best val_loss: {result.best_fitness:.6f}")
     print(f"  best config:   {result.best_config.model_dump()}")
     return result.best_config
@@ -142,8 +151,10 @@ def phase2_validate(best_config: ReturnsCNNConfig) -> None:
     n_default_win = sum(1 for s in default_skills if s > 0)
     n_evolved_win = sum(1 for s in evolved_skills if s > 0)
     print("-" * len(header))
-    print(f"{'mean':<7}{np.mean(default_skills):>+16.4f}{np.mean(evolved_skills):>+16.4f}"
-          f"{np.mean(evolved_skills) - np.mean(default_skills):>+10.4f}")
+    print(
+        f"{'mean':<7}{np.mean(default_skills):>+16.4f}{np.mean(evolved_skills):>+16.4f}"
+        f"{np.mean(evolved_skills) - np.mean(default_skills):>+10.4f}"
+    )
     print(f"\nbeats persistence: default {n_default_win}/10  |  evolved {n_evolved_win}/10")
 
 
@@ -152,8 +163,10 @@ def main() -> None:
     print(f"Train up to {TRAIN_END}, test {TEST_START}..{TEST_END}, window={WINDOW_SIZE}")
 
     proxy_split = load_split(PROXY_TICKER)
-    print(f"\nproxy ticker {PROXY_TICKER}: "
-          f"train={len(proxy_split.X_train)}, val={len(proxy_split.X_val)}")
+    print(
+        f"\nproxy ticker {PROXY_TICKER}: "
+        f"train={len(proxy_split.X_train)}, val={len(proxy_split.X_val)}"
+    )
 
     overall_t0 = time.time()
     best_config = phase1_search(proxy_split)

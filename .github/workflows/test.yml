@@ -1,4 +1,4 @@
-name: tests
+name: ci
 
 on:
   push:
@@ -8,9 +8,29 @@ on:
   workflow_dispatch:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.x"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: ruff check
+        run: uvx ruff check .
+
+      - name: ruff format (check only)
+        run: uvx ruff format --check .
+
   pytest:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: lint
     steps:
       - uses: actions/checkout@v4
 

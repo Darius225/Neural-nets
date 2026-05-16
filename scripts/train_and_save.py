@@ -37,7 +37,9 @@ MODELS_DIR = Path("models")
 
 # v5 ES result (see experiments/evolve_returns_v5.py).
 EVOLVED_CONFIG = ReturnsCNNConfig(
-    dropout=0.4, huber_delta=0.01, learning_rate=2e-3,
+    dropout=0.4,
+    huber_delta=0.01,
+    learning_rate=2e-3,
 )
 
 
@@ -56,8 +58,11 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("ticker")
     p.add_argument("--source", choices=["csv", "yfinance"], default="csv")
-    p.add_argument("--train-end", default="2007-07-31",
-                   help="last day included in training (default: 2007-07-31)")
+    p.add_argument(
+        "--train-end",
+        default="2007-07-31",
+        help="last day included in training (default: 2007-07-31)",
+    )
     p.add_argument("--test-start", default="2007-08-01")
     p.add_argument("--test-end", default="2009-12-31")
     p.add_argument("--window", type=int, default=30)
@@ -75,13 +80,19 @@ def main() -> None:
     print(f"loading {args.ticker} from {args.source}...")
     df = _load(args.ticker, args.source)
     split = prepare_windowed_returns_split(
-        df, train_end=args.train_end, test_start=args.test_start,
-        test_end=args.test_end, window_size=args.window,
+        df,
+        train_end=args.train_end,
+        test_start=args.test_start,
+        test_end=args.test_end,
+        window_size=args.window,
         feature_builder=build_technical_features,
     )
-    print(f"  X_train={split.X_train.shape}, X_val={split.X_val.shape}, X_test={split.X_test.shape}")
+    print(
+        f"  X_train={split.X_train.shape}, X_val={split.X_val.shape}, X_test={split.X_test.shape}"
+    )
 
-    np.random.seed(args.seed); tf.random.set_seed(args.seed)
+    np.random.seed(args.seed)
+    tf.random.set_seed(args.seed)
     tf.keras.backend.clear_session()
 
     config = EVOLVED_CONFIG if args.config == "evolved" else ReturnsCNNConfig()
@@ -89,11 +100,15 @@ def main() -> None:
 
     model = build_returns_cnn(split.window_size, split.n_features, config=config)
     history = model.fit(
-        split.X_train, split.y_train,
+        split.X_train,
+        split.y_train,
         validation_data=(split.X_val, split.y_val),
-        epochs=args.epochs, batch_size=args.batch_size, verbose=2,
-        callbacks=[EarlyStopping(monitor="val_loss", patience=args.patience,
-                                 restore_best_weights=True)],
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        verbose=2,
+        callbacks=[
+            EarlyStopping(monitor="val_loss", patience=args.patience, restore_best_weights=True)
+        ],
     )
 
     model_path = out_dir / f"{args.ticker}.keras"

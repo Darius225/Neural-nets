@@ -17,7 +17,7 @@ Mixed Pydantic + @dataclass on purpose:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -25,7 +25,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from tensorflow.keras import Model
 
 from .splits import Dataset
-
 
 # ----------------------------------- training ------------------------------
 
@@ -40,9 +39,10 @@ class TrainingResult:
     object (Model, ndarray-backed Dataset) or a mutable mapping
     (history) — none of which Pydantic validates meaningfully.
     """
+
     model: Model
     dataset: Dataset
-    history: Dict[str, list]
+    history: dict[str, list]
 
     @property
     def final_val_mape(self) -> float:
@@ -65,6 +65,7 @@ class EvaluationResult(BaseModel):
     ``frozen=True`` matches the snapshot semantics — evaluation
     results don't get updated after the fact.
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
     predictions: np.ndarray
@@ -84,7 +85,7 @@ class EvaluationResult(BaseModel):
 
 # ----------------------------------- search histories ----------------------
 
-Individual = Dict[str, Any]
+Individual = dict[str, Any]
 
 
 @dataclass
@@ -95,8 +96,9 @@ class SearchHistory:
     trajectory list dozens of times per run. Pydantic with assignment
     validation would just add overhead.
     """
-    best_fitness_per_iteration: List[float] = field(default_factory=list)
-    best_params: Optional[Individual] = None
+
+    best_fitness_per_iteration: list[float] = field(default_factory=list)
+    best_params: Individual | None = None
     best_fitness: float = float("inf")
     cache_hits: int = 0
     evaluations: int = 0
@@ -124,9 +126,10 @@ class EvolutionResult:
     Same rationale as :class:`SearchHistory` — mutated heavily during
     the loop, no validation invariants worth enforcing on each write.
     """
-    best_config: Optional[BaseModel]
+
+    best_config: BaseModel | None
     best_fitness: float
-    best_fitness_per_iter: List[float] = field(default_factory=list)
+    best_fitness_per_iter: list[float] = field(default_factory=list)
     evaluations: int = 0
     cache_hits: int = 0
     wall_time_s: float = 0.0
@@ -144,7 +147,7 @@ class EvolutionResult:
             print(f"  -> new best {fitness:.5f}")
         return True
 
-    def as_summary(self) -> Dict[str, Any]:
+    def as_summary(self) -> dict[str, Any]:
         return {
             "best_fitness": self.best_fitness,
             "evaluations": self.evaluations,

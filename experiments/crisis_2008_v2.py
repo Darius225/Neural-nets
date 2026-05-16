@@ -35,7 +35,6 @@ from src.data import load_csv, prepare_windowed_returns_split
 from src.metrics import compute_metrics, naive_persistence_forecast
 from src.models import build_returns_cnn
 
-
 TICKERS = ["JPM", "BAC", "C", "MSFT", "AAPL", "IBM", "JNJ", "PG", "GE", "XOM"]
 TRAIN_END = "2007-07-31"
 TEST_START = "2007-08-01"
@@ -57,7 +56,10 @@ def evaluate_ticker(ticker: str) -> dict:
     """Train v2 pipeline pre-crisis, predict 2008-2009 in price space."""
     df = load_csv(f"{CSV_DIR}/{ticker}.csv", with_dates=True)
     split = prepare_windowed_returns_split(
-        df, train_end=TRAIN_END, test_start=TEST_START, test_end=TEST_END,
+        df,
+        train_end=TRAIN_END,
+        test_start=TEST_START,
+        test_end=TEST_END,
         window_size=WINDOW_SIZE,
     )
 
@@ -65,12 +67,17 @@ def evaluate_ticker(ticker: str) -> dict:
     set_seed(SEED)
     model = build_returns_cnn(split.window_size, split.n_features)
     hist = model.fit(
-        split.X_train, split.y_train,
+        split.X_train,
+        split.y_train,
         validation_data=(split.X_val, split.y_val),
-        epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=0,
-        callbacks=[EarlyStopping(monitor="val_loss",
-                                 patience=EARLY_STOP_PATIENCE,
-                                 restore_best_weights=True)],
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        verbose=0,
+        callbacks=[
+            EarlyStopping(
+                monitor="val_loss", patience=EARLY_STOP_PATIENCE, restore_best_weights=True
+            )
+        ],
     )
     epochs_used = len(hist.history["loss"])
 
@@ -80,11 +87,16 @@ def evaluate_ticker(ticker: str) -> dict:
     baseline_prices = naive_persistence_forecast(split.close_at_t_test)  # = close[t]
 
     model_metrics = compute_metrics(
-        actual_prices, pred_prices, y_prev=split.close_at_t_test,
-        train_min=split.train_close_min, train_max=split.train_close_max,
+        actual_prices,
+        pred_prices,
+        y_prev=split.close_at_t_test,
+        train_min=split.train_close_min,
+        train_max=split.train_close_max,
     )
     baseline_metrics = compute_metrics(
-        actual_prices, baseline_prices, y_prev=split.close_at_t_test,
+        actual_prices,
+        baseline_prices,
+        y_prev=split.close_at_t_test,
     )
 
     return {
@@ -127,21 +139,30 @@ def print_per_ticker_table(rows: list[dict]) -> None:
 
 
 def aggregate_summary(rows: list[dict]) -> None:
-    skills = [r["model"].skill_vs_persistence for r in rows if r["model"].skill_vs_persistence is not None]
+    skills = [
+        r["model"].skill_vs_persistence for r in rows if r["model"].skill_vs_persistence is not None
+    ]
     n_beat = sum(1 for s in skills if s > 0)
     print("\nAggregate over", len(rows), "tickers")
     print("-" * 50)
-    print(f"  mean MAE         : model = {np.mean([r['model'].mae for r in rows]):.3f}  "
-          f"|  persistence = {np.mean([r['baseline'].mae for r in rows]):.3f}")
-    print(f"  mean DirAcc%     : model = {np.mean([r['model'].directional_accuracy for r in rows]):.2f}")
+    print(
+        f"  mean MAE         : model = {np.mean([r['model'].mae for r in rows]):.3f}  "
+        f"|  persistence = {np.mean([r['baseline'].mae for r in rows]):.3f}"
+    )
+    print(
+        f"  mean DirAcc%     : model = {np.mean([r['model'].directional_accuracy for r in rows]):.2f}"
+    )
     print(f"  beats persistence: {n_beat}/{len(rows)} tickers (skill > 0)")
     print(f"  mean skill score : {np.mean(skills):+.4f}")
-    print(f"  mean epochs used : {np.mean([r['epochs_used'] for r in rows]):.1f} "
-          f"(of {EPOCHS} max, early-stopped)")
+    print(
+        f"  mean epochs used : {np.mean([r['epochs_used'] for r in rows]):.1f} "
+        f"(of {EPOCHS} max, early-stopped)"
+    )
 
 
 def save_prediction_plots(rows: list[dict], out_dir: str = "experiments/plots_v2") -> None:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -151,12 +172,16 @@ def save_prediction_plots(rows: list[dict], out_dir: str = "experiments/plots_v2
         df = r["predictions"]
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(df.index, df["actual"], label="actual", color="black", linewidth=1.2)
-        ax.plot(df.index, df["predicted"], label="v2 CNN (returns)", color="C2", alpha=0.8, linewidth=1)
+        ax.plot(
+            df.index, df["predicted"], label="v2 CNN (returns)", color="C2", alpha=0.8, linewidth=1
+        )
         ax.plot(df.index, df["baseline"], label="persistence", color="C0", alpha=0.4, linewidth=0.8)
         ax.axvline(lehman, color="grey", linestyle="--", alpha=0.7, label="Lehman")
-        ax.set_title(f"{r['ticker']} v2  MAE={r['model'].mae:.2f}  "
-                     f"skill={r['model'].skill_vs_persistence:+.3f}  "
-                     f"DirAcc={r['model'].directional_accuracy:.1f}%")
+        ax.set_title(
+            f"{r['ticker']} v2  MAE={r['model'].mae:.2f}  "
+            f"skill={r['model'].skill_vs_persistence:+.3f}  "
+            f"DirAcc={r['model'].directional_accuracy:.1f}%"
+        )
         ax.set_ylabel("Close ($)")
         ax.legend(loc="best")
         ax.grid(alpha=0.3)
@@ -178,9 +203,11 @@ def main() -> None:
         try:
             row = evaluate_ticker(ticker)
             rows.append(row)
-            print(f"  [{ticker}] {time.time() - t0:.1f}s  "
-                  f"(train={row['n_train']}, val={row['n_val']}, test={row['n_test']}, "
-                  f"epochs={row['epochs_used']})")
+            print(
+                f"  [{ticker}] {time.time() - t0:.1f}s  "
+                f"(train={row['n_train']}, val={row['n_val']}, test={row['n_test']}, "
+                f"epochs={row['epochs_used']})"
+            )
         except Exception as exc:
             print(f"  [{ticker}] FAILED: {exc}")
     print(f"\nTotal: {time.time() - start:.1f}s\n")

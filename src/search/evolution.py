@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import random
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -26,16 +27,16 @@ from .._cache import memoize_by
 from ..schemas.configs import EvolutionConfig
 from ..schemas.results import EvolutionResult
 
-ConfigT = Type[BaseModel]
+ConfigT = type[BaseModel]
 FitnessFn = Callable[[BaseModel], float]
-_CacheKey = Tuple[Tuple[str, Any], ...]
+_CacheKey = tuple[tuple[str, Any], ...]
 
 
 def _key(cfg: BaseModel) -> _CacheKey:
     return tuple(sorted(cfg.model_dump().items()))
 
 
-def random_config(schema: ConfigT, ranges: Dict[str, List[Any]], rng: random.Random) -> BaseModel:
+def random_config(schema: ConfigT, ranges: dict[str, list[Any]], rng: random.Random) -> BaseModel:
     """Construct a config by picking each field from ``ranges``.
 
     Fields not present in ``ranges`` keep their default. Pydantic will
@@ -48,7 +49,7 @@ def random_config(schema: ConfigT, ranges: Dict[str, List[Any]], rng: random.Ran
 
 def mutate_config(
     cfg: BaseModel,
-    ranges: Dict[str, List[Any]],
+    ranges: dict[str, list[Any]],
     mutation_probability: float,
     rng: random.Random,
     *,
@@ -79,11 +80,11 @@ def mutate_config(
 
 def one_plus_one_es(
     schema: ConfigT,
-    ranges: Dict[str, List[Any]],
+    ranges: dict[str, list[Any]],
     fitness: FitnessFn,
-    es: Optional[EvolutionConfig] = None,
+    es: EvolutionConfig | None = None,
     *,
-    initial: Optional[BaseModel] = None,
+    initial: BaseModel | None = None,
     use_cache: bool = True,
 ) -> EvolutionResult:
     """Run (1+1)-ES with stagnation-restart and an optional fitness cache.

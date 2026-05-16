@@ -45,11 +45,10 @@ from tensorflow.keras.callbacks import EarlyStopping
 
 from src.configs import ReturnsCNNConfig
 from src.data import load_csv
-from src.data.splits import _build_windows, _zscore_window
+from src.data.splits import _build_windows
 from src.features import build_technical_features
 from src.metrics import compute_metrics
 from src.models import build_returns_cnn
-
 
 ETH_CSV = Path("stock_market_data/crypto/csv/ETHUSDT.csv")
 BTC_CSV = Path("stock_market_data/crypto/csv/BTCUSDT.csv")
@@ -63,11 +62,15 @@ SEED = 42
 # ES-evolved config from evolve_eth_btc_5day.py — kept identical across
 # folds so we test signal robustness, not search-loop robustness.
 CONFIG = ReturnsCNNConfig(
-    conv1_filters=64, conv1_kernel=3,
-    conv2_filters=48, conv2_kernel=4,
-    dense_units=64, dropout=0.3,
+    conv1_filters=64,
+    conv1_kernel=3,
+    conv2_filters=48,
+    conv2_kernel=4,
+    dense_units=64,
+    dropout=0.3,
     activation="relu",
-    huber_delta=0.01, learning_rate=0.002,
+    huber_delta=0.01,
+    learning_rate=0.002,
 )
 
 FOLDS = [
@@ -81,7 +84,8 @@ FOLDS = [
 
 
 def set_seed(s: int) -> None:
-    np.random.seed(s); tf.random.set_seed(s)
+    np.random.seed(s)
+    tf.random.set_seed(s)
 
 
 def build_combined(eth: pd.DataFrame, btc: pd.DataFrame):
@@ -118,19 +122,19 @@ def run_fold(features, closes, tr_start, tr_end, te_start, te_end):
     set_seed(SEED)
     model = build_returns_cnn(WINDOW_SIZE, features.shape[1], config=CONFIG)
     history = model.fit(
-        X_tr, y_tr, validation_data=(X_val, y_val),
-        epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=0,
-        callbacks=[EarlyStopping(monitor="val_loss", patience=PATIENCE,
-                                 restore_best_weights=True)],
+        X_tr,
+        y_tr,
+        validation_data=(X_val, y_val),
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        verbose=0,
+        callbacks=[EarlyStopping(monitor="val_loss", patience=PATIENCE, restore_best_weights=True)],
     )
     pred = model.predict(X_te, verbose=0).flatten()
     pred_p = c_te * (1 + pred)
     actual_p = c_te * (1 + y_te)
     metrics = compute_metrics(actual_p, pred_p, y_prev=c_te)
-    if pred.std() > 0 and y_te.std() > 0:
-        ic = float(np.corrcoef(pred, y_te)[0, 1])
-    else:
-        ic = float("nan")
+    ic = float(np.corrcoef(pred, y_te)[0, 1]) if pred.std() > 0 and y_te.std() > 0 else float("nan")
     return {
         "n_train": len(X_tr_all),
         "n_test": len(X_te),
@@ -167,11 +171,15 @@ def main() -> None:
     eth = load_csv(str(ETH_CSV), with_dates=True)
     btc = load_csv(str(BTC_CSV), with_dates=True)
     features, closes = build_combined(eth, btc)
-    print(f"data: {features.shape[1]} features, "
-          f"{features.index[0].date()}..{features.index[-1].date()}\n")
+    print(
+        f"data: {features.shape[1]} features, "
+        f"{features.index[0].date()}..{features.index[-1].date()}\n"
+    )
 
-    print(f"{'fold':<7}{'n_train':>8}{'n_test':>8}{'epochs':>8}"
-          f"{'IC':>10}{'skill':>10}{'DirAcc%':>10}{'std_ratio':>11}{'MAE$':>10}")
+    print(
+        f"{'fold':<7}{'n_train':>8}{'n_test':>8}{'epochs':>8}"
+        f"{'IC':>10}{'skill':>10}{'DirAcc%':>10}{'std_ratio':>11}{'MAE$':>10}"
+    )
     print("-" * 82)
 
     rows = []
@@ -181,9 +189,11 @@ def main() -> None:
             print(f"{label:<7}  [skip — not enough data]")
             continue
         rows.append({"fold": label, **r})
-        print(f"{label:<7}{r['n_train']:>8}{r['n_test']:>8}{r['epochs']:>8}"
-              f"{r['ic']:>+10.4f}{r['skill']:>+10.4f}"
-              f"{r['dir_acc']:>10.2f}{r['pred_std_ratio']:>11.3f}{r['mae']:>10.2f}")
+        print(
+            f"{label:<7}{r['n_train']:>8}{r['n_test']:>8}{r['epochs']:>8}"
+            f"{r['ic']:>+10.4f}{r['skill']:>+10.4f}"
+            f"{r['dir_acc']:>10.2f}{r['pred_std_ratio']:>11.3f}{r['mae']:>10.2f}"
+        )
 
     if not rows:
         print("\nno folds ran.")
@@ -192,20 +202,25 @@ def main() -> None:
     ics = [r["ic"] for r in rows]
     skills = [r["skill"] for r in rows]
     print("-" * 82)
-    print(f"{'mean':<7}{'':>8}{'':>8}{'':>8}"
-          f"{np.mean(ics):>+10.4f}{np.mean(skills):>+10.4f}")
-    print(f"{'stdev':<7}{'':>8}{'':>8}{'':>8}"
-          f"{np.std(ics, ddof=1):>10.4f}{np.std(skills, ddof=1):>10.4f}")
-    print(f"{'n>0':<7}{'':>8}{'':>8}{'':>8}"
-          f"{sum(1 for x in ics if x > 0):>10d}/{len(ics)}"
-          f"{sum(1 for x in skills if x > 0):>9d}/{len(skills)}")
+    print(f"{'mean':<7}{'':>8}{'':>8}{'':>8}{np.mean(ics):>+10.4f}{np.mean(skills):>+10.4f}")
+    print(
+        f"{'stdev':<7}{'':>8}{'':>8}{'':>8}"
+        f"{np.std(ics, ddof=1):>10.4f}{np.std(skills, ddof=1):>10.4f}"
+    )
+    print(
+        f"{'n>0':<7}{'':>8}{'':>8}{'':>8}"
+        f"{sum(1 for x in ics if x > 0):>10d}/{len(ics)}"
+        f"{sum(1 for x in skills if x > 0):>9d}/{len(skills)}"
+    )
 
     t = t_stat(ics)
     sig = ""
     if not math.isnan(t):
         sig = "  p<0.05" if abs(t) >= 2.57 else "  p<0.10" if abs(t) >= 2.02 else "  NS"
-    print(f"\nIC mean = {np.mean(ics):+.4f}, "
-          f"t-stat against zero = {t:+.2f}{sig}  (n={len(ics)} folds, df={len(ics)-1})")
+    print(
+        f"\nIC mean = {np.mean(ics):+.4f}, "
+        f"t-stat against zero = {t:+.2f}{sig}  (n={len(ics)} folds, df={len(ics) - 1})"
+    )
 
     # Honest interpretation hint.
     print()

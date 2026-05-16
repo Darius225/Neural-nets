@@ -47,3 +47,35 @@ packages = ["src"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-ra --strict-markers"
+
+# ruff — linter + formatter (replaces black + isort + flake8 + pyupgrade).
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["*.ipynb"]   # notebooks have their own conventions
+
+[tool.ruff.lint]
+# E + W: pycodestyle errors / warnings
+# F:     pyflakes  (unused imports / undefined names)
+# I:     isort     (import ordering)
+# B:     flake8-bugbear (likely bugs)
+# UP:    pyupgrade (modern syntax)
+# SIM:   flake8-simplify
+# RUF:   ruff-native rules
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF"]
+# E501 (line too long): handled by the formatter.
+# B008 (function call in default): trips on Pydantic Field(...) which is legitimate.
+# RUF001/RUF002: en-dashes and multiplication signs in docstrings are intentional
+# typography (e.g. "10 tickers × 6 years"), not source-code typos.
+ignore = ["E501", "B008", "RUF001", "RUF002"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py"            = ["F401"]   # re-exports
+"src/**/__init__.py"     = ["F401"]   # ditto
+"tests/**"               = ["B011"]   # assert-like patterns OK in tests
+"experiments/**"         = ["E402"]   # sys.path tweak before imports is intentional
+"scripts/**"             = ["E402"]   # same
+"benchmarks/**"          = ["E402"]   # same
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]

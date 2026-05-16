@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import random
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import tensorflow as tf
 
@@ -28,14 +28,14 @@ from ..schemas.configs import HYPERPARAMETER_RANGES
 from ..schemas.results import Individual, SearchHistory
 from ..training import train_on_prepared
 
-_CacheKey = Tuple[Tuple[str, Any], ...]
+_CacheKey = tuple[tuple[str, Any], ...]
 
 
 def _key(individual: Individual) -> _CacheKey:
     return tuple(sorted(individual.items()))
 
 
-def random_individual(rng: Optional[random.Random] = None) -> Individual:
+def random_individual(rng: random.Random | None = None) -> Individual:
     rng = rng if rng is not None else random.Random()
     return {key: rng.choice(values) for key, values in HYPERPARAMETER_RANGES.items()}
 
@@ -43,7 +43,7 @@ def random_individual(rng: Optional[random.Random] = None) -> Individual:
 def mutate(
     individual: Individual,
     mutation_probability: float,
-    rng: Optional[random.Random] = None,
+    rng: random.Random | None = None,
     *,
     force_change: bool = True,
     max_tries: int = 16,
@@ -74,7 +74,7 @@ def evaluate(
     *,
     epochs: int,
     batch_size: int,
-    early_stopping_patience: Optional[int],
+    early_stopping_patience: int | None,
     verbose: bool = True,
 ) -> float:
     """Train and return final validation MAPE (lower is better).
@@ -110,12 +110,12 @@ def one_plus_one_es(
     max_iterations: int = 200,
     reset_threshold: int = 15,
     mutation_probability: float = 0.3,
-    initial: Optional[Individual] = None,
+    initial: Individual | None = None,
     epochs: int = 100,
     batch_size: int = 50,
-    early_stopping_patience: Optional[int] = 15,
+    early_stopping_patience: int | None = 15,
     verbose: bool = True,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     use_cache: bool = True,
 ) -> SearchHistory:
     """(1+1)-ES with restart on stagnation. Operates on a pre-prepared
@@ -126,8 +126,12 @@ def one_plus_one_es(
     @memoize_by(_key, enabled=use_cache)
     def score(individual: Individual) -> float:
         return evaluate(
-            individual, dataset, epochs=epochs, batch_size=batch_size,
-            early_stopping_patience=early_stopping_patience, verbose=verbose,
+            individual,
+            dataset,
+            epochs=epochs,
+            batch_size=batch_size,
+            early_stopping_patience=early_stopping_patience,
+            verbose=verbose,
         )
 
     current = initial if initial is not None else random_individual(rng)

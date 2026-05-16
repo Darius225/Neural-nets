@@ -14,10 +14,10 @@ def synthetic_ohlcv() -> pd.DataFrame:
     base = np.cumsum(rng.normal(0, 1, n)) + 100
     return pd.DataFrame(
         {
-            "Open":   base + rng.normal(0, 0.5, n),
-            "High":   base + rng.uniform(0, 1, n),
-            "Low":    base - rng.uniform(0, 1, n),
-            "Close":  base + rng.normal(0, 0.5, n),
+            "Open": base + rng.normal(0, 0.5, n),
+            "High": base + rng.uniform(0, 1, n),
+            "Low": base - rng.uniform(0, 1, n),
+            "Close": base + rng.normal(0, 0.5, n),
             "Volume": rng.integers(1_000_000, 2_000_000, n),
         }
     )
@@ -26,8 +26,16 @@ def synthetic_ohlcv() -> pd.DataFrame:
 def test_returns_all_ten_features(synthetic_ohlcv):
     feat = build_technical_features(synthetic_ohlcv)
     expected = {
-        "log_return", "vol_10", "vol_20", "momentum_10", "close_over_sma20",
-        "rsi_14", "bb_position", "volume_z", "hl_range_pct", "co_gap_pct",
+        "log_return",
+        "vol_10",
+        "vol_20",
+        "momentum_10",
+        "close_over_sma20",
+        "rsi_14",
+        "bb_position",
+        "volume_z",
+        "hl_range_pct",
+        "co_gap_pct",
     }
     assert set(feat.columns) == expected
     assert len(feat) == len(synthetic_ohlcv)
@@ -56,9 +64,7 @@ def test_rsi_in_zero_one_range(synthetic_ohlcv):
 def test_log_return_matches_definition(synthetic_ohlcv):
     feat = build_technical_features(synthetic_ohlcv)
     expected = np.log(synthetic_ohlcv["Close"] / synthetic_ohlcv["Close"].shift(1))
-    pd.testing.assert_series_equal(
-        feat["log_return"], expected, check_names=False
-    )
+    pd.testing.assert_series_equal(feat["log_return"], expected, check_names=False)
 
 
 class TestBuildWindowsHorizon:
@@ -66,6 +72,7 @@ class TestBuildWindowsHorizon:
 
     def test_horizon_1_targets_match_next_day_return(self):
         from src.data.splits import _build_windows
+
         closes = np.array([100, 101, 102, 100, 103], dtype=np.float32)
         feats = np.column_stack([closes, closes])  # 2 dummy features
         X, y, c_at_t = _build_windows(feats, closes, window_size=2, horizon=1)
@@ -77,6 +84,7 @@ class TestBuildWindowsHorizon:
 
     def test_horizon_5_compounded_return(self):
         from src.data.splits import _build_windows
+
         closes = np.arange(1, 21, dtype=np.float32) * 10  # 10, 20, ..., 200
         feats = np.column_stack([closes, closes])
         X, y, c_at_t = _build_windows(feats, closes, window_size=3, horizon=5)
@@ -89,6 +97,7 @@ class TestBuildWindowsHorizon:
 
     def test_not_enough_rows_raises(self):
         from src.data.splits import _build_windows
+
         closes = np.arange(5, dtype=np.float32)
         feats = closes.reshape(-1, 1)
         with pytest.raises(ValueError, match="Need at least"):

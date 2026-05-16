@@ -17,7 +17,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import List
 
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -50,10 +49,10 @@ def make_synthetic_df(n: int = 400, seed: int = 0) -> pd.DataFrame:
     base = np.cumsum(rng.normal(0, 1, n)) + 100
     return pd.DataFrame(
         {
-            "Open":   base + rng.normal(0, 0.5, n),
-            "High":   base + rng.uniform(0, 1, n),
-            "Low":    base - rng.uniform(0, 1, n),
-            "Close":  base + rng.normal(0, 0.5, n),
+            "Open": base + rng.normal(0, 0.5, n),
+            "High": base + rng.uniform(0, 1, n),
+            "Low": base - rng.uniform(0, 1, n),
+            "Close": base + rng.normal(0, 0.5, n),
             "Volume": rng.integers(1e6, 2e6, n),
         }
     )
@@ -63,7 +62,7 @@ def rss_mb() -> float:
     return psutil.Process().memory_info().rss / (1024 * 1024)
 
 
-def run_loop(clear_session: bool, dataset) -> List[float]:
+def run_loop(clear_session: bool, dataset) -> list[float]:
     """Return RSS in MB after each iteration."""
     rss_trace = []
     for _ in range(N_ITER):
@@ -71,14 +70,17 @@ def run_loop(clear_session: bool, dataset) -> List[float]:
             tf.keras.backend.clear_session()
             gc.collect()
         train_on_prepared(
-            dataset, model_factory=build_general_cnn, params=PARAMS,
-            epochs=EPOCHS, batch_size=BATCH_SIZE,
+            dataset,
+            model_factory=build_general_cnn,
+            params=PARAMS,
+            epochs=EPOCHS,
+            batch_size=BATCH_SIZE,
         )
         rss_trace.append(rss_mb())
     return rss_trace
 
 
-def summarise(label: str, trace: List[float]) -> None:
+def summarise(label: str, trace: list[float]) -> None:
     start = trace[0]
     end = trace[-1]
     peak = max(trace)
@@ -95,8 +97,9 @@ def main() -> None:
 
     print(f"{N_ITER} iterations, {EPOCHS} epochs each, RSS measured per iter\n")
     print("warming up TF...")
-    train_on_prepared(dataset, model_factory=build_general_cnn, params=PARAMS,
-                      epochs=2, batch_size=BATCH_SIZE)
+    train_on_prepared(
+        dataset, model_factory=build_general_cnn, params=PARAMS, epochs=2, batch_size=BATCH_SIZE
+    )
     tf.keras.backend.clear_session()
     gc.collect()
     print("done.\n")
@@ -110,17 +113,18 @@ def main() -> None:
     t2 = time.time()
 
     summarise("WITHOUT clear_session", trace_off)
-    summarise("WITH clear_session",    trace_on)
+    summarise("WITH clear_session", trace_on)
     print(f"\n  time WITHOUT clear : {t1 - t0:.1f}s")
     print(f"  time WITH    clear : {t2 - t1:.1f}s")
 
     growth_off = trace_off[-1] - trace_off[0]
     growth_on = trace_on[-1] - trace_on[0]
-    print(f"\n  memory leak reduced by {growth_off - growth_on:+.1f}MB "
-          f"over {N_ITER} iterations")
+    print(f"\n  memory leak reduced by {growth_off - growth_on:+.1f}MB over {N_ITER} iterations")
     if growth_off > 0:
-        print(f"  (without clear_session, RSS grew "
-              f"{growth_off / N_ITER:.2f}MB per iteration on average)")
+        print(
+            f"  (without clear_session, RSS grew "
+            f"{growth_off / N_ITER:.2f}MB per iteration on average)"
+        )
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ hyperparameter search — same topology, all knobs exposed.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from tensorflow.keras import Sequential
 from tensorflow.keras.layers import Conv1D, Dense, Dropout, Flatten
@@ -26,7 +26,7 @@ from .schemas.configs import (  # noqa: F401
 )
 
 
-def build_best_cnn(input_shape: int, params: Optional[Dict[str, Any]] = None) -> Sequential:
+def build_best_cnn(input_shape: int, params: dict[str, Any] | None = None) -> Sequential:
     """The default Conv1D-256/k=5 -> Dense-150 -> Dense-1 model.
 
     ``params`` is accepted (and ignored) so this factory has the same
@@ -48,9 +48,9 @@ def build_best_cnn(input_shape: int, params: Optional[Dict[str, Any]] = None) ->
 def build_returns_cnn(
     window_size: int,
     n_features: int = 5,
-    config: Optional[ReturnsCNNConfig] = None,
+    config: ReturnsCNNConfig | None = None,
     *,
-    huber_delta: Optional[float] = 0.05,
+    huber_delta: float | None = 0.05,
 ) -> Sequential:
     """CNN for the windowed-returns pipeline.
 
@@ -74,11 +74,15 @@ def build_returns_cnn(
     loss = "mse" if config.huber_delta is None else Huber(delta=config.huber_delta)
     model = Sequential(
         [
-            Conv1D(config.conv1_filters, kernel_size=config.conv1_kernel,
-                   activation=config.activation,
-                   input_shape=(window_size, n_features)),
-            Conv1D(config.conv2_filters, kernel_size=config.conv2_kernel,
-                   activation=config.activation),
+            Conv1D(
+                config.conv1_filters,
+                kernel_size=config.conv1_kernel,
+                activation=config.activation,
+                input_shape=(window_size, n_features),
+            ),
+            Conv1D(
+                config.conv2_filters, kernel_size=config.conv2_kernel, activation=config.activation
+            ),
             Flatten(),
             Dense(config.dense_units, activation=config.activation),
             Dropout(config.dropout),
@@ -89,7 +93,7 @@ def build_returns_cnn(
     return model
 
 
-def build_general_cnn(input_shape: int, params: Dict[str, Any]) -> Sequential:
+def build_general_cnn(input_shape: int, params: dict[str, Any]) -> Sequential:
     """Same topology as ``build_best_cnn`` but every hyperparameter is exposed."""
     model = Sequential(
         [

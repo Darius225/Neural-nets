@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import matplotlib.pyplot as plt
 
@@ -23,7 +23,9 @@ def plot_training_curve(
     plt.show()
 
 
-def plot_predictions(actual: Sequence[float], predicted: Sequence[float], title: str = "Predictions") -> None:
+def plot_predictions(
+    actual: Sequence[float], predicted: Sequence[float], title: str = "Predictions"
+) -> None:
     plt.figure(figsize=(10, 5))
     plt.plot(actual, "b-o", label="Actual")
     plt.plot(predicted, "r-x", label="Predicted")

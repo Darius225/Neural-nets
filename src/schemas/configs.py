@@ -20,7 +20,7 @@ Plain dataclasses are the right tool there.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,6 +31,7 @@ class ReturnsCNNConfig(BaseModel):
     Defaults reproduce the hand-picked v2/v3 architecture so existing
     code keeps working when callers pass ``ReturnsCNNConfig()``.
     """
+
     model_config = ConfigDict(extra="forbid")
 
     conv1_filters: int = Field(default=64, ge=8, le=256)
@@ -40,7 +41,7 @@ class ReturnsCNNConfig(BaseModel):
     dense_units: int = Field(default=64, ge=8, le=256)
     dropout: float = Field(default=0.2, ge=0.0, le=0.5)
     activation: str = Field(default="relu")
-    huber_delta: Optional[float] = Field(default=0.05, ge=0.005, le=0.5)
+    huber_delta: float | None = Field(default=0.05, ge=0.005, le=0.5)
     learning_rate: float = Field(default=1e-3, gt=0.0, le=1e-1)
 
 
@@ -48,7 +49,7 @@ class ReturnsCNNConfig(BaseModel):
 # match ReturnsCNNConfig field names. Continuous fields use a list of
 # plausible values rather than a uniform draw — keeps the search space
 # small enough for a few dozen iterations to cover meaningfully.
-RETURNS_CNN_RANGES: Dict[str, List[Any]] = {
+RETURNS_CNN_RANGES: dict[str, list[Any]] = {
     "conv1_filters": [16, 32, 48, 64, 96, 128, 192],
     "conv1_kernel": [2, 3, 4, 5],
     "conv2_filters": [16, 24, 32, 48, 64, 96],
@@ -66,7 +67,7 @@ RETURNS_CNN_RANGES: Dict[str, List[Any]] = {
 # "ranges + best-known config" is the configuration concern, not a
 # modelling concern. The new build_returns_cnn uses
 # :data:`RETURNS_CNN_RANGES` + :class:`ReturnsCNNConfig` instead.
-HYPERPARAMETER_RANGES: Dict[str, List[Any]] = {
+HYPERPARAMETER_RANGES: dict[str, list[Any]] = {
     "number_of_filters": list(range(32, 1024)),
     "kernel_size": list(range(1, 6)),
     "activation_in_convolution": ["relu", "sigmoid", "tanh", "linear", "swish"],
@@ -76,7 +77,7 @@ HYPERPARAMETER_RANGES: Dict[str, List[Any]] = {
     "loss": ["mean_squared_error", "mean_absolute_error", "huber_loss"],
 }
 
-BEST_HYPERPARAMETERS: Dict[str, Any] = {
+BEST_HYPERPARAMETERS: dict[str, Any] = {
     "number_of_filters": 256,
     "kernel_size": 5,
     "activation_in_convolution": "relu",
@@ -89,9 +90,10 @@ BEST_HYPERPARAMETERS: Dict[str, Any] = {
 
 class ExperimentConfig(BaseModel):
     """Train/test calendar window and tickers for a regime-shift experiment."""
+
     model_config = ConfigDict(extra="forbid")
 
-    tickers: List[str] = Field(min_length=1)
+    tickers: list[str] = Field(min_length=1)
     train_end: str
     test_start: str
     test_end: str
@@ -104,10 +106,13 @@ class ExperimentConfig(BaseModel):
 
 class EvolutionConfig(BaseModel):
     """Parameters for the (1+1)-ES driver in :mod:`src.evolution`."""
+
     model_config = ConfigDict(extra="forbid")
 
     max_iterations: int = Field(default=20, ge=2, le=10_000)
     mutation_probability: float = Field(default=0.3, ge=0.0, le=1.0)
-    reset_threshold: int = Field(default=10, ge=1, description="Restart from random after this many no-progress steps")
+    reset_threshold: int = Field(
+        default=10, ge=1, description="Restart from random after this many no-progress steps"
+    )
     seed: int = 42
     verbose: bool = True

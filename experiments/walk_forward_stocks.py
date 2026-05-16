@@ -43,7 +43,6 @@ from src.features import build_technical_features
 from src.metrics import compute_metrics
 from src.models import build_returns_cnn
 
-
 CSV_DIR = "stock_market_data/sp500/csv"
 TICKERS = ["JPM", "BAC", "C", "MSFT", "AAPL", "IBM", "JNJ", "PG", "GE", "XOM"]
 
@@ -57,7 +56,9 @@ SEED = 42
 # Same ES-evolved config as the crypto walk-forward — the test is
 # signal robustness, not search-loop robustness.
 CONFIG = ReturnsCNNConfig(
-    dropout=0.4, huber_delta=0.01, learning_rate=0.002,
+    dropout=0.4,
+    huber_delta=0.01,
+    learning_rate=0.002,
 )
 
 # Six years spanning calm + crisis + recovery, all with at least a few
@@ -67,7 +68,8 @@ TRAIN_HISTORY_START = "1990-01-01"
 
 
 def set_seed(s: int) -> None:
-    np.random.seed(s); tf.random.set_seed(s)
+    np.random.seed(s)
+    tf.random.set_seed(s)
 
 
 def build_features_and_closes(df: pd.DataFrame):
@@ -76,8 +78,7 @@ def build_features_and_closes(df: pd.DataFrame):
     return features, closes
 
 
-def windows_in_range(features: pd.DataFrame, closes: pd.Series,
-                     start: str, end: str):
+def windows_in_range(features: pd.DataFrame, closes: pd.Series, start: str, end: str):
     mask = (features.index >= pd.to_datetime(start)) & (features.index <= pd.to_datetime(end))
     f = features.loc[mask].values.astype(np.float32)
     c = closes.loc[mask].values.astype(np.float32)
@@ -88,8 +89,7 @@ def windows_in_range(features: pd.DataFrame, closes: pd.Series,
 
 def run_fold(features, closes, train_end: str, test_year: int):
     train_pack = windows_in_range(features, closes, TRAIN_HISTORY_START, train_end)
-    test_pack = windows_in_range(features, closes,
-                                 f"{test_year}-01-01", f"{test_year}-12-31")
+    test_pack = windows_in_range(features, closes, f"{test_year}-01-01", f"{test_year}-12-31")
     if train_pack is None or test_pack is None:
         return None
     X_tr_all, y_tr_all, _ = train_pack
@@ -103,10 +103,13 @@ def run_fold(features, closes, train_end: str, test_year: int):
     set_seed(SEED)
     model = build_returns_cnn(WINDOW_SIZE, features.shape[1], config=CONFIG)
     history = model.fit(
-        X_tr, y_tr, validation_data=(X_val, y_val),
-        epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=0,
-        callbacks=[EarlyStopping(monitor="val_loss", patience=PATIENCE,
-                                 restore_best_weights=True)],
+        X_tr,
+        y_tr,
+        validation_data=(X_val, y_val),
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        verbose=0,
+        callbacks=[EarlyStopping(monitor="val_loss", patience=PATIENCE, restore_best_weights=True)],
     )
     pred = model.predict(X_te, verbose=0).flatten()
     pred_p = c_te * (1 + pred)
@@ -143,8 +146,10 @@ def main() -> None:
     grid = {t: {} for t in TICKERS}
     all_rows = []
 
-    print(f"{'ticker':<7}{'year':>6}{'n_tr':>7}{'n_te':>6}{'eps':>5}"
-          f"{'IC':>10}{'skill':>10}{'DirA%':>8}{'std_r':>8}")
+    print(
+        f"{'ticker':<7}{'year':>6}{'n_tr':>7}{'n_te':>6}{'eps':>5}"
+        f"{'IC':>10}{'skill':>10}{'DirA%':>8}{'std_r':>8}"
+    )
     print("-" * 67)
 
     for ticker in TICKERS:
@@ -158,9 +163,11 @@ def main() -> None:
                 continue
             grid[ticker][year] = r["ic"]
             all_rows.append({"ticker": ticker, "year": year, **r})
-            print(f"{ticker:<7}{year:>6}{r['n_train']:>7}{r['n_test']:>6}"
-                  f"{r['epochs']:>5}{r['ic']:>+10.4f}{r['skill']:>+10.4f}"
-                  f"{r['dir_acc']:>8.2f}{r['pred_std_ratio']:>8.3f}")
+            print(
+                f"{ticker:<7}{year:>6}{r['n_train']:>7}{r['n_test']:>6}"
+                f"{r['epochs']:>5}{r['ic']:>+10.4f}{r['skill']:>+10.4f}"
+                f"{r['dir_acc']:>8.2f}{r['pred_std_ratio']:>8.3f}"
+            )
 
     # ---------------- per-ticker means ----------------
     print("\nIC per ticker (across years):")
@@ -172,12 +179,15 @@ def main() -> None:
         ics = [x for x in ics_all if not math.isnan(x)]
         if not ics:
             continue
-        m = np.mean(ics); s = np.std(ics, ddof=1) if len(ics) > 1 else float("nan")
+        m = np.mean(ics)
+        s = np.std(ics, ddof=1) if len(ics) > 1 else float("nan")
         ticker_means.append(m)
         n_nan = len(ics_all) - len(ics)
         nan_note = f"  [{n_nan} nan]" if n_nan else ""
-        print(f"  {ticker:<7}{m:>+9.4f}{s:>9.4f}"
-              f"{sum(1 for x in ics if x > 0):>4d}/{len(ics)}{nan_note}")
+        print(
+            f"  {ticker:<7}{m:>+9.4f}{s:>9.4f}"
+            f"{sum(1 for x in ics if x > 0):>4d}/{len(ics)}{nan_note}"
+        )
 
     # ---------------- per-year means ----------------
     print("\nIC per year (across tickers):")
@@ -189,7 +199,8 @@ def main() -> None:
         ics = [x for x in ics_all if x is not None and not math.isnan(x)]
         if not ics:
             continue
-        m = np.mean(ics); s = np.std(ics, ddof=1) if len(ics) > 1 else float("nan")
+        m = np.mean(ics)
+        s = np.std(ics, ddof=1) if len(ics) > 1 else float("nan")
         year_means[year] = m
         note = ""
         if year == 2007:
@@ -198,8 +209,9 @@ def main() -> None:
             note = "<- crisis year"
         elif year == 2009:
             note = "<- recovery"
-        print(f"  {year:<7}{m:>+9.4f}{s:>9.4f}"
-              f"{sum(1 for x in ics if x > 0):>4d}/{len(ics)}    {note}")
+        print(
+            f"  {year:<7}{m:>+9.4f}{s:>9.4f}{sum(1 for x in ics if x > 0):>4d}/{len(ics)}    {note}"
+        )
 
     # ---------------- overall summary ----------------
     all_ics = [row["ic"] for row in all_rows if not math.isnan(row["ic"])]
@@ -211,10 +223,20 @@ def main() -> None:
     t = t_stat(all_ics)
     sig = ""
     if not math.isnan(t):
-        sig = "  p<0.01" if abs(t) >= 2.66 else "  p<0.05" if abs(t) >= 2.00 else "  p<0.10" if abs(t) >= 1.67 else "  NS"
+        sig = (
+            "  p<0.01"
+            if abs(t) >= 2.66
+            else "  p<0.05"
+            if abs(t) >= 2.00
+            else "  p<0.10"
+            if abs(t) >= 1.67
+            else "  NS"
+        )
     print(f"  t-stat vs zero   = {t:+.2f}{sig}")
-    print(f"  mean skill       = {np.mean(all_skills):+.4f}  "
-          f"(n>0: {sum(1 for x in all_skills if x > 0)}/{len(all_skills)})")
+    print(
+        f"  mean skill       = {np.mean(all_skills):+.4f}  "
+        f"(n>0: {sum(1 for x in all_skills if x > 0)}/{len(all_skills)})"
+    )
 
     print(f"\ntotal wall: {time.time() - t0:.1f}s")
 

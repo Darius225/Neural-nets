@@ -37,7 +37,6 @@ from src.features import build_technical_features
 from src.metrics import compute_metrics, naive_persistence_forecast
 from src.models import build_returns_cnn
 
-
 TICKER = "ETH-USD"
 BINANCE_SYMBOL = "ETHUSDT"
 LOCAL_CSV = Path("stock_market_data/crypto/csv/ETHUSDT.csv")
@@ -59,6 +58,7 @@ def set_seed(s: int) -> None:
 
 def save_plot(test_index, actual, pred, baseline, metrics, out_path):
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -70,9 +70,11 @@ def save_plot(test_index, actual, pred, baseline, metrics, out_path):
     ax.plot(test_index, baseline, label="persistence", color="C0", alpha=0.4, linewidth=0.8)
     ax.axvline(luna, color="orange", linestyle="--", alpha=0.7, label="LUNA collapse")
     ax.axvline(ftx, color="red", linestyle="--", alpha=0.7, label="FTX bankruptcy")
-    ax.set_title(f"{TICKER}  MAE=${metrics.mae:.2f}  "
-                 f"skill={metrics.skill_vs_persistence:+.4f}  "
-                 f"DirAcc={metrics.directional_accuracy:.1f}%")
+    ax.set_title(
+        f"{TICKER}  MAE=${metrics.mae:.2f}  "
+        f"skill={metrics.skill_vs_persistence:+.4f}  "
+        f"DirAcc={metrics.directional_accuracy:.1f}%"
+    )
     ax.set_ylabel("Close ($)")
     ax.legend(loc="best")
     ax.grid(alpha=0.3)
@@ -83,9 +85,8 @@ def save_plot(test_index, actual, pred, baseline, metrics, out_path):
 
 
 def main() -> None:
-    print(f"v3 pipeline on {TICKER}: train ending {TRAIN_END}, "
-          f"test {TEST_START}..{TEST_END}")
-    print(f"shocks in test window: LUNA collapse 2022-05-09, FTX 2022-11-11\n")
+    print(f"v3 pipeline on {TICKER}: train ending {TRAIN_END}, test {TEST_START}..{TEST_END}")
+    print("shocks in test window: LUNA collapse 2022-05-09, FTX 2022-11-11\n")
 
     t0 = time.time()
 
@@ -108,26 +109,41 @@ def main() -> None:
     print(f"  {len(df)} rows, {df.index.min().date()} .. {df.index.max().date()}")
 
     split = prepare_windowed_returns_split(
-        df, train_end=TRAIN_END, test_start=TEST_START, test_end=TEST_END,
-        window_size=WINDOW_SIZE, feature_builder=build_technical_features,
+        df,
+        train_end=TRAIN_END,
+        test_start=TEST_START,
+        test_end=TEST_END,
+        window_size=WINDOW_SIZE,
+        feature_builder=build_technical_features,
     )
-    print(f"  X_train={split.X_train.shape}, X_val={split.X_val.shape}, "
-          f"X_test={split.X_test.shape}")
-    print(f"  y_test return distribution: mean={split.y_test.mean():+.4f} "
-          f"std={split.y_test.std():.4f}")
+    print(
+        f"  X_train={split.X_train.shape}, X_val={split.X_val.shape}, X_test={split.X_test.shape}"
+    )
+    print(
+        f"  y_test return distribution: mean={split.y_test.mean():+.4f} "
+        f"std={split.y_test.std():.4f}"
+    )
 
     tf.keras.backend.clear_session()
     set_seed(SEED)
     model = build_returns_cnn(split.window_size, split.n_features, config=EVOLVED_CONFIG)
     hist = model.fit(
-        split.X_train, split.y_train,
+        split.X_train,
+        split.y_train,
         validation_data=(split.X_val, split.y_val),
-        epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=0,
-        callbacks=[EarlyStopping(monitor="val_loss", patience=EARLY_STOP_PATIENCE,
-                                 restore_best_weights=True)],
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        verbose=0,
+        callbacks=[
+            EarlyStopping(
+                monitor="val_loss", patience=EARLY_STOP_PATIENCE, restore_best_weights=True
+            )
+        ],
     )
-    print(f"  trained {len(hist.history['loss'])} epochs, "
-          f"best val_loss={min(hist.history['val_loss']):.6f}")
+    print(
+        f"  trained {len(hist.history['loss'])} epochs, "
+        f"best val_loss={min(hist.history['val_loss']):.6f}"
+    )
 
     pred_returns = model.predict(split.X_test, verbose=0).flatten()
     pred_prices = split.close_at_t_test * (1 + pred_returns)
@@ -139,12 +155,13 @@ def main() -> None:
 
     print(f"\n{TICKER}  {TEST_START}..{TEST_END}")
     print("-" * 60)
-    print(f"  model:       MAE=${m.mae:>8.3f}  RMSE=${m.rmse:>8.3f}  "
-          f"DirAcc={m.directional_accuracy:5.2f}%  skill={m.skill_vs_persistence:+.4f}")
+    print(
+        f"  model:       MAE=${m.mae:>8.3f}  RMSE=${m.rmse:>8.3f}  "
+        f"DirAcc={m.directional_accuracy:5.2f}%  skill={m.skill_vs_persistence:+.4f}"
+    )
     print(f"  persistence: MAE=${b.mae:>8.3f}  RMSE=${b.rmse:>8.3f}")
     print(f"  corr(pred_returns, actual_returns) = {corr:+.4f}")
-    print(f"  pred return std / actual return std = "
-          f"{pred_returns.std() / split.y_test.std():.3f}")
+    print(f"  pred return std / actual return std = {pred_returns.std() / split.y_test.std():.3f}")
 
     plot_path = "experiments/plots_crypto/ETH-USD.png"
     save_plot(split.test_index, split.actual_close_test, pred_prices, baseline, m, plot_path)

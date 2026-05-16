@@ -20,7 +20,6 @@ import random
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -30,28 +29,29 @@ import pandas as pd
 import tensorflow as tf
 
 from src.data import Dataset, prepare_dataset
-from src.search.hyperparam import _key, mutate, random_individual
 from src.models import build_general_cnn
+from src.search.hyperparam import _key
 from src.training import train, train_on_prepared
 
 # ---------- tiny synthetic problem so the benchmark runs in seconds ----------
+
 
 def make_synthetic_df(n: int = 400, seed: int = 0) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     base = np.cumsum(rng.normal(0, 1, n)) + 100
     return pd.DataFrame(
         {
-            "Open":   base + rng.normal(0, 0.5, n),
-            "High":   base + rng.uniform(0, 1, n),
-            "Low":    base - rng.uniform(0, 1, n),
-            "Close":  base + rng.normal(0, 0.5, n),
+            "Open": base + rng.normal(0, 0.5, n),
+            "High": base + rng.uniform(0, 1, n),
+            "Low": base - rng.uniform(0, 1, n),
+            "Close": base + rng.normal(0, 0.5, n),
             "Volume": rng.integers(1e6, 2e6, n),
         }
     )
 
 
-N_EVALS = 20          # individuals per run
-EPOCHS = 8            # keep each train short — we measure structure, not convergence
+N_EVALS = 20  # individuals per run
+EPOCHS = 8  # keep each train short — we measure structure, not convergence
 BATCH_SIZE = 32
 MUTATION_P = 0.3
 SEED = 42
@@ -69,11 +69,11 @@ TINY_RANGES = {
 }
 
 
-def tiny_individual(rng: random.Random) -> Dict:
+def tiny_individual(rng: random.Random) -> dict:
     return {k: rng.choice(v) for k, v in TINY_RANGES.items()}
 
 
-def tiny_mutate(ind: Dict, rng: random.Random, force_change: bool = False) -> Dict:
+def tiny_mutate(ind: dict, rng: random.Random, force_change: bool = False) -> dict:
     while True:
         mutated = {
             k: (rng.choice(v) if rng.random() < MUTATION_P else ind[k])
@@ -83,7 +83,7 @@ def tiny_mutate(ind: Dict, rng: random.Random, force_change: bool = False) -> Di
             return mutated
 
 
-def generate_individuals(n: int, seed: int) -> List[Dict]:
+def generate_individuals(n: int, seed: int) -> list[dict]:
     """Generate the same sequence of individuals every run so each
     scenario evaluates *identical* configs — only the machinery differs.
     """
@@ -97,7 +97,7 @@ def generate_individuals(n: int, seed: int) -> List[Dict]:
 # ----------------------------- scenarios -----------------------------------
 
 
-def scenario_naive(df: pd.DataFrame, individuals: List[Dict]) -> Tuple[float, int, int]:
+def scenario_naive(df: pd.DataFrame, individuals: list[dict]) -> tuple[float, int, int]:
     tf.keras.backend.clear_session()  # fair startup state
     start = time.time()
     n_dup = 0
@@ -118,7 +118,7 @@ def scenario_naive(df: pd.DataFrame, individuals: List[Dict]) -> Tuple[float, in
     return time.time() - start, len(individuals), n_dup
 
 
-def scenario_prepared(dataset: Dataset, individuals: List[Dict]) -> Tuple[float, int, int]:
+def scenario_prepared(dataset: Dataset, individuals: list[dict]) -> tuple[float, int, int]:
     tf.keras.backend.clear_session()  # fair startup state
     start = time.time()
     n_dup = 0
@@ -138,9 +138,9 @@ def scenario_prepared(dataset: Dataset, individuals: List[Dict]) -> Tuple[float,
     return time.time() - start, len(individuals), n_dup
 
 
-def scenario_full(dataset: Dataset, individuals: List[Dict]) -> Tuple[float, int, int]:
+def scenario_full(dataset: Dataset, individuals: list[dict]) -> tuple[float, int, int]:
     tf.keras.backend.clear_session()  # fair startup state
-    cache: Dict = {}
+    cache: dict = {}
     start = time.time()
     cache_hits = 0
     for ind in individuals:
@@ -174,8 +174,11 @@ def main() -> None:
     # land on whichever scenario runs first.
     print("warming up TF...")
     train_on_prepared(
-        dataset, model_factory=build_general_cnn,
-        params=individuals[0], epochs=2, batch_size=BATCH_SIZE,
+        dataset,
+        model_factory=build_general_cnn,
+        params=individuals[0],
+        epochs=2,
+        batch_size=BATCH_SIZE,
     )
     print("done. running scenarios...\n")
 
@@ -185,8 +188,8 @@ def main() -> None:
 
     rows = [
         ("A. naive (prep-per-eval)", t_naive, n_eval_a, f"{n_dup_a} dups (retrained)"),
-        ("B. prepared once",         t_prep,  n_eval_b, f"{n_dup_b} dups (retrained)"),
-        ("C. prepared + cache",      t_full,  n_eval_c, f"{n_hits_c} cache hits (skipped)"),
+        ("B. prepared once", t_prep, n_eval_b, f"{n_dup_b} dups (retrained)"),
+        ("C. prepared + cache", t_full, n_eval_c, f"{n_hits_c} cache hits (skipped)"),
     ]
 
     width = max(len(r[0]) for r in rows)

@@ -37,20 +37,20 @@ __all__ = [
     "BEST_HYPERPARAMETERS",
     "HYPERPARAMETER_RANGES",
     "RETURNS_CNN_RANGES",
-    "EvolutionConfig",
-    "ExperimentConfig",
-    "ReturnsCNNConfig",
-    # metrics
-    "PredictionMetrics",
-    # results
-    "EvaluationResult",
-    "EvolutionResult",
-    "Individual",
-    "SearchHistory",
-    "TrainingResult",
     # splits
     "Dataset",
+    # results
+    "EvaluationResult",
+    "EvolutionConfig",
+    "EvolutionResult",
+    "ExperimentConfig",
+    "Individual",
     "MultiTickerSplit",
+    # metrics
+    "PredictionMetrics",
+    "ReturnsCNNConfig",
+    "SearchHistory",
     "TrainTestSplit",
+    "TrainingResult",
     "WindowedReturnsSplit",
 ]

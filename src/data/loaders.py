@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Dict, Optional
 
 import pandas as pd
 
@@ -24,9 +23,9 @@ DEFAULT_CSV_GLOB = "stock_market_data/sp500/csv/*.csv"
 DEFAULT_DATE_FORMAT = "%d-%m-%Y"
 
 
-def discover_csv_paths(pattern: str = DEFAULT_CSV_GLOB) -> Dict[str, str]:
+def discover_csv_paths(pattern: str = DEFAULT_CSV_GLOB) -> dict[str, str]:
     """Map ticker symbol -> CSV path for every file matching ``pattern``."""
-    paths: Dict[str, str] = {}
+    paths: dict[str, str] = {}
     for file in glob.glob(pattern, recursive=True):
         ticker = os.path.splitext(os.path.basename(file))[0]
         paths[ticker] = file
@@ -41,12 +40,14 @@ def load_csv(path: str, with_dates: bool = False) -> pd.DataFrame:
     """
     if not with_dates:
         return pd.read_csv(path, usecols=FEATURE_COLUMNS)
-    df = pd.read_csv(path, usecols=["Date"] + FEATURE_COLUMNS)
+    df = pd.read_csv(path, usecols=["Date", *FEATURE_COLUMNS])
     df["Date"] = pd.to_datetime(df["Date"], format=DEFAULT_DATE_FORMAT)
     return df.set_index("Date").sort_index()
 
 
-def slice_by_date(df: pd.DataFrame, start: Optional[str] = None, end: Optional[str] = None) -> pd.DataFrame:
+def slice_by_date(
+    df: pd.DataFrame, start: str | None = None, end: str | None = None
+) -> pd.DataFrame:
     """Return rows of ``df`` (DatetimeIndex assumed) within [start, end]."""
     if start is not None:
         df = df[df.index >= pd.to_datetime(start)]
