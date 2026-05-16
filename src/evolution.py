@@ -114,8 +114,10 @@ def one_plus_one_es(
     es = es or EvolutionConfig()
     rng = random.Random(es.seed)
     cache: Optional[Dict[_CacheKey, float]] = {} if use_cache else None
+    result = EvolutionResult(best_config=None, best_fitness=float("inf"))
 
     def evaluate(cfg: BaseModel) -> float:
+        """Pure evaluate-with-cache. No bookkeeping side effects."""
         if cache is not None:
             k = _key(cfg)
             if k in cache:
@@ -132,32 +134,37 @@ def one_plus_one_es(
             cache[_key(cfg)] = score
         return score
 
+    def track_eval(cfg: BaseModel) -> float:
+        """Evaluate, update result counters, return fitness."""
+        if cache is not None and _key(cfg) in cache:
+            result.cache_hits += 1
+        score = evaluate(cfg)
+        result.evaluations += 1
+        return score
+
+    def consider(cfg: BaseModel, fit: float) -> None:
+        """Update best_* if this candidate is the new global optimum."""
+        if fit < result.best_fitness:
+            result.best_fitness = fit
+            result.best_config = cfg.model_copy()
+            if es.verbose:
+                print(f"  -> new best {fit:.5f}")
+
     start = time.time()
     current = initial if initial is not None else random_config(schema, ranges, rng)
-    current_fit = evaluate(current)
-    result = EvolutionResult(
-        best_config=current.model_copy(),
-        best_fitness=current_fit,
-        best_fitness_per_iter=[current_fit],
-        evaluations=1,
-    )
+    current_fit = track_eval(current)
+    consider(current, current_fit)
+    result.best_fitness_per_iter.append(current_fit)
     no_progress = 0
 
     for _ in range(es.max_iterations):
         candidate = mutate_config(current, ranges, es.mutation_probability, rng)
-        if cache is not None and _key(candidate) in cache:
-            result.cache_hits += 1
-        candidate_fit = evaluate(candidate)
-        result.evaluations += 1
+        candidate_fit = track_eval(candidate)
 
         if candidate_fit <= current_fit:
             current, current_fit = candidate, candidate_fit
+            consider(candidate, candidate_fit)
             no_progress = 0
-            if candidate_fit < result.best_fitness:
-                result.best_fitness = candidate_fit
-                result.best_config = candidate.model_copy()
-                if es.verbose:
-                    print(f"  -> new best {candidate_fit:.5f}")
         else:
             no_progress += 1
 
@@ -165,8 +172,7 @@ def one_plus_one_es(
             if es.verbose:
                 print("  -> stagnation, restarting from random individual")
             current = random_config(schema, ranges, rng)
-            current_fit = evaluate(current)
-            result.evaluations += 1
+            current_fit = track_eval(current)
             no_progress = 0
 
         result.best_fitness_per_iter.append(result.best_fitness)

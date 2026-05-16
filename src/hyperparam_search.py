@@ -141,42 +141,44 @@ def one_plus_one_es(
     ``Dataset`` so scaling/splitting happens exactly once."""
     rng = random.Random(seed)
     cache: Optional[Dict[_CacheKey, float]] = {} if use_cache else None
+    history = SearchHistory()
 
     eval_fn = partial(
-        evaluate,
-        dataset=dataset,
-        epochs=epochs,
-        batch_size=batch_size,
+        evaluate, dataset=dataset, epochs=epochs, batch_size=batch_size,
         early_stopping_patience=early_stopping_patience,
-        verbose=verbose,
-        cache=cache,
+        verbose=verbose, cache=cache,
     )
 
+    def track_eval(individual: Individual) -> float:
+        """Evaluate, update history counters, return fitness."""
+        if cache is not None and _key(individual) in cache:
+            history.cache_hits += 1
+        fit = eval_fn(individual)
+        history.evaluations += 1
+        return fit
+
+    def consider(candidate: Individual, fitness: float) -> None:
+        """Update best_* if the candidate is the new global optimum."""
+        if fitness < history.best_fitness:
+            history.best_fitness = fitness
+            history.best_params = dict(candidate)
+            if verbose:
+                print(f"  -> new best {fitness:.4f}")
+
     current = initial if initial is not None else random_individual(rng)
-    current_fitness = eval_fn(current)
-    history = SearchHistory(
-        best_fitness_per_iteration=[current_fitness],
-        best_params=dict(current),
-        best_fitness=current_fitness,
-        evaluations=1,
-    )
+    current_fitness = track_eval(current)
+    consider(current, current_fitness)
+    history.best_fitness_per_iteration.append(current_fitness)
     no_progress = 0
 
     for _ in range(max_iterations):
         candidate = mutate(current, mutation_probability, rng)
-        if cache is not None and _key(candidate) in cache:
-            history.cache_hits += 1
-        candidate_fitness = eval_fn(candidate)
-        history.evaluations += 1
+        candidate_fitness = track_eval(candidate)
 
         if candidate_fitness <= current_fitness:
             current, current_fitness = candidate, candidate_fitness
+            consider(candidate, candidate_fitness)
             no_progress = 0
-            if candidate_fitness < history.best_fitness:
-                history.best_fitness = candidate_fitness
-                history.best_params = dict(candidate)
-                if verbose:
-                    print(f"  -> new best {candidate_fitness:.4f}")
         else:
             no_progress += 1
 
@@ -184,8 +186,7 @@ def one_plus_one_es(
             if verbose:
                 print("  -> stagnation, restarting")
             current = random_individual(rng)
-            current_fitness = eval_fn(current)
-            history.evaluations += 1
+            current_fitness = track_eval(current)
             no_progress = 0
 
         history.best_fitness_per_iteration.append(history.best_fitness)

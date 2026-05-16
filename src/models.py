@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Optional
 
 from tensorflow.keras import Sequential
 from tensorflow.keras.layers import Conv1D, Dense, Dropout, Flatten
+from tensorflow.keras.losses import Huber
+from tensorflow.keras.optimizers import Adam
+
+from .configs import ReturnsCNNConfig
 
 HYPERPARAMETER_RANGES: Dict[str, List[Any]] = {
     "number_of_filters": list(range(32, 1024)),
@@ -57,7 +61,7 @@ def build_best_cnn(input_shape: int, params: Optional[Dict[str, Any]] = None) ->
 def build_returns_cnn(
     window_size: int,
     n_features: int = 5,
-    config: Optional["ReturnsCNNConfig"] = None,  # type: ignore[name-defined]
+    config: Optional[ReturnsCNNConfig] = None,
     *,
     huber_delta: Optional[float] = 0.05,
 ) -> Sequential:
@@ -77,17 +81,10 @@ def build_returns_cnn(
     Pass ``huber_delta=None`` (and config.huber_delta=None) to fall back
     to MSE.
     """
-    import tensorflow as tf
     if config is None:
-        # Lazy import to avoid an import cycle when models.py is loaded
-        # by tests without configs needing pydantic installed.
-        from .configs import ReturnsCNNConfig
-        config = ReturnsCNNConfig(huber_delta=huber_delta) if huber_delta is not None \
-            else ReturnsCNNConfig(huber_delta=None)
+        config = ReturnsCNNConfig(huber_delta=huber_delta)
 
-    delta = config.huber_delta
-    loss = "mse" if delta is None else tf.keras.losses.Huber(delta=delta)
-    optimizer = tf.keras.optimizers.Adam(learning_rate=config.learning_rate)
+    loss = "mse" if config.huber_delta is None else Huber(delta=config.huber_delta)
     model = Sequential(
         [
             Conv1D(config.conv1_filters, kernel_size=config.conv1_kernel,
@@ -101,7 +98,7 @@ def build_returns_cnn(
             Dense(1),
         ]
     )
-    model.compile(optimizer=optimizer, loss=loss, metrics=["mae"])
+    model.compile(optimizer=Adam(learning_rate=config.learning_rate), loss=loss, metrics=["mae"])
     return model
 
 
