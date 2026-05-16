@@ -32,7 +32,14 @@ from .metrics import (
     naive_persistence_forecast,
     skill_score,
 )
+from .configs import (
+    EvolutionConfig,
+    ExperimentConfig,
+    RETURNS_CNN_RANGES,
+    ReturnsCNNConfig,
+)
 from .evaluation import EvaluationResult, predict_and_evaluate
+from .evolution import EvolutionResult, mutate_config, one_plus_one_es as evolve, random_config
 from .features import build_technical_features
 from .hyperparam_search import SearchHistory, one_plus_one_es, random_individual
 from .models import (
