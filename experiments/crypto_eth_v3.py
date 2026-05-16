@@ -32,13 +32,15 @@ import tensorflow as tf
 from tensorflow.keras.callbacks import EarlyStopping
 
 from src.configs import ReturnsCNNConfig
-from src.data import load_yfinance, prepare_windowed_returns_split
+from src.data import load_csv, load_yfinance, prepare_windowed_returns_split
 from src.features import build_technical_features
 from src.metrics import compute_metrics, naive_persistence_forecast
 from src.models import build_returns_cnn
 
 
 TICKER = "ETH-USD"
+BINANCE_SYMBOL = "ETHUSDT"
+LOCAL_CSV = Path("stock_market_data/crypto/csv/ETHUSDT.csv")
 TRAIN_END = "2022-04-30"
 TEST_START = "2022-05-01"
 TEST_END = "2024-01-01"
@@ -86,17 +88,23 @@ def main() -> None:
     print(f"shocks in test window: LUNA collapse 2022-05-09, FTX 2022-11-11\n")
 
     t0 = time.time()
-    print(f"fetching {TICKER} via yfinance...")
-    df = load_yfinance(TICKER)
-    if len(df) == 0:
-        raise SystemExit(
-            f"yfinance returned 0 rows for {TICKER}. Common causes:\n"
-            f"  - Yahoo Finance rate-limit or temporary API change\n"
-            f"  - No network access\n"
-            f"  - yfinance version mismatch (project pins 0.2.33; try `pip install -U yfinance`)\n"
-            f"Workaround: drop an OHLCV CSV at stock_market_data/sp500/csv/{TICKER}.csv\n"
-            f"and rerun with the CSV loader instead."
-        )
+
+    # Prefer a locally cached Binance CSV; fall back to yfinance only when
+    # the CSV isn't there. yfinance has been flaky for crypto in 2024-2025,
+    # so the Binance public REST API (downloaded by scripts/fetch_binance.py)
+    # is the more reliable source.
+    if LOCAL_CSV.exists():
+        print(f"loading {TICKER} from local Binance CSV ({LOCAL_CSV})...")
+        df = load_csv(str(LOCAL_CSV), with_dates=True)
+    else:
+        print(f"local CSV not found at {LOCAL_CSV}; falling back to yfinance...")
+        df = load_yfinance(TICKER)
+        if len(df) == 0:
+            raise SystemExit(
+                f"yfinance returned 0 rows for {TICKER} and no local CSV exists.\n"
+                f"Fix: run  python scripts/fetch_binance.py {BINANCE_SYMBOL} "
+                f"--start 2018-01-01 --end 2024-01-01"
+            )
     print(f"  {len(df)} rows, {df.index.min().date()} .. {df.index.max().date()}")
 
     split = prepare_windowed_returns_split(

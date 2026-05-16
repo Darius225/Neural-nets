@@ -32,16 +32,15 @@ dev = [
 [project.urls]
 Repository = "https://github.com/darius225/Neural-nets"
 
+[dependency-groups]
+dev = ["pytest==9.0.1"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
-
-# uv-specific (https://docs.astral.sh/uv/)
-[tool.uv]
-dev-dependencies = ["pytest==9.0.1"]
 
 # pytest config — keeps test discovery deterministic.
 [tool.pytest.ini_options]
