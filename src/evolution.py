@@ -120,6 +120,19 @@ class EvolutionResult:
     cache_hits: int = 0
     wall_time_s: float = 0.0
 
+    def consider(self, candidate: BaseModel, fitness: float, *, verbose: bool = False) -> bool:
+        """Update best_* if ``fitness`` is the new global optimum.
+
+        Returns ``True`` when a new optimum was recorded.
+        """
+        if fitness >= self.best_fitness:
+            return False
+        self.best_fitness = fitness
+        self.best_config = candidate.model_copy()
+        if verbose:
+            print(f"  -> new best {fitness:.5f}")
+        return True
+
     def as_summary(self) -> Dict[str, Any]:
         return {
             "best_fitness": self.best_fitness,
@@ -160,18 +173,10 @@ def one_plus_one_es(
                 print(f"  [fail] {exc}  {cfg.model_dump()}")
             return float("inf")
 
-    def consider(cfg: BaseModel, fit: float) -> None:
-        """Update best_* if this candidate is the new global optimum."""
-        if fit < result.best_fitness:
-            result.best_fitness = fit
-            result.best_config = cfg.model_copy()
-            if es.verbose:
-                print(f"  -> new best {fit:.5f}")
-
     start = time.time()
     current = initial if initial is not None else random_config(schema, ranges, rng)
     current_fit = evaluate(current)
-    consider(current, current_fit)
+    result.consider(current, current_fit, verbose=es.verbose)
     result.best_fitness_per_iter.append(current_fit)
     no_progress = 0
 
@@ -181,7 +186,7 @@ def one_plus_one_es(
 
         if candidate_fit <= current_fit:
             current, current_fit = candidate, candidate_fit
-            consider(candidate, candidate_fit)
+            result.consider(candidate, candidate_fit, verbose=es.verbose)
             no_progress = 0
         else:
             no_progress += 1

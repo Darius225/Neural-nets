@@ -112,6 +112,21 @@ class SearchHistory:
     cache_hits: int = 0
     evaluations: int = 0
 
+    def consider(self, candidate: Individual, fitness: float, *, verbose: bool = False) -> bool:
+        """Update best_* if ``fitness`` is the new global optimum.
+
+        Returns ``True`` when a new optimum was recorded. The verbose
+        toggle prints a short progress line — the caller doesn't have
+        to wrap this in its own ``if verbose:``.
+        """
+        if fitness >= self.best_fitness:
+            return False
+        self.best_fitness = fitness
+        self.best_params = dict(candidate)
+        if verbose:
+            print(f"  -> new best {fitness:.4f}")
+        return True
+
 
 def one_plus_one_es(
     dataset: Dataset,
@@ -139,17 +154,9 @@ def one_plus_one_es(
             early_stopping_patience=early_stopping_patience, verbose=verbose,
         )
 
-    def consider(candidate: Individual, fitness: float) -> None:
-        """Update best_* if the candidate is the new global optimum."""
-        if fitness < history.best_fitness:
-            history.best_fitness = fitness
-            history.best_params = dict(candidate)
-            if verbose:
-                print(f"  -> new best {fitness:.4f}")
-
     current = initial if initial is not None else random_individual(rng)
     current_fitness = score(current)
-    consider(current, current_fitness)
+    history.consider(current, current_fitness, verbose=verbose)
     history.best_fitness_per_iteration.append(current_fitness)
     no_progress = 0
 
@@ -159,7 +166,7 @@ def one_plus_one_es(
 
         if candidate_fitness <= current_fitness:
             current, current_fitness = candidate, candidate_fitness
-            consider(candidate, candidate_fitness)
+            history.consider(candidate, candidate_fitness, verbose=verbose)
             no_progress = 0
         else:
             no_progress += 1
