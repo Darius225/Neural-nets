@@ -44,5 +44,13 @@ ibm.us.txt
 # Trained models saved by scripts/train_and_save.py (regenerable).
 models/
 
+# Experiment plot outputs (regenerable by re-running the scripts).
+experiments/plots/
+experiments/plots_v2/
+experiments/plots_v3/
+experiments/plots_v4/
+experiments/plots_crypto/
+
 # Old scratchpad notebooks (kept locally only).
 attempting.ipynb
+.claude/

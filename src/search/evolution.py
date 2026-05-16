@@ -16,57 +16,23 @@ training run.
 
 from __future__ import annotations
 
-import functools
 import random
 import time
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Hashable, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 from pydantic import BaseModel
 
-from ..configs import EvolutionConfig
+from .._cache import memoize_by
+from ..schemas.configs import EvolutionConfig
+from ..schemas.results import EvolutionResult
 
 ConfigT = Type[BaseModel]
 FitnessFn = Callable[[BaseModel], float]
 _CacheKey = Tuple[Tuple[str, Any], ...]
-T = TypeVar("T")
 
 
 def _key(cfg: BaseModel) -> _CacheKey:
     return tuple(sorted(cfg.model_dump().items()))
-
-
-def memoize_by(key_fn: Callable[[Any], Hashable], *, enabled: bool = True):
-    """Cache function results, keying by ``key_fn(first_arg)``.
-
-    The decorated function exposes ``.hits``, ``.misses``, and ``.cache``
-    attributes for inspection. With ``enabled=False`` no caching happens
-    and ``.misses`` simply counts every call — handy for benchmarking
-    "with vs without cache" without changing call sites.
-
-    Used here because the natural argument (a dict / Pydantic model) is
-    not hashable, so :func:`functools.cache` can't help directly.
-    """
-    def decorator(fn: Callable[..., T]) -> Callable[..., T]:
-        @functools.wraps(fn)
-        def wrapper(arg, *rest, **kwargs):
-            if not enabled:
-                wrapper.misses += 1
-                return fn(arg, *rest, **kwargs)
-            key = key_fn(arg)
-            if key in wrapper.cache:
-                wrapper.hits += 1
-                return wrapper.cache[key]
-            wrapper.misses += 1
-            result = fn(arg, *rest, **kwargs)
-            wrapper.cache[key] = result
-            return result
-
-        wrapper.cache = {}
-        wrapper.hits = 0
-        wrapper.misses = 0
-        return wrapper
-    return decorator
 
 
 def random_config(schema: ConfigT, ranges: Dict[str, List[Any]], rng: random.Random) -> BaseModel:
@@ -109,38 +75,6 @@ def mutate_config(
     if alts:
         forced[gene] = rng.choice(alts)
     return schema(**forced)
-
-
-@dataclass
-class EvolutionResult:
-    best_config: Optional[BaseModel]
-    best_fitness: float
-    best_fitness_per_iter: List[float] = field(default_factory=list)
-    evaluations: int = 0
-    cache_hits: int = 0
-    wall_time_s: float = 0.0
-
-    def consider(self, candidate: BaseModel, fitness: float, *, verbose: bool = False) -> bool:
-        """Update best_* if ``fitness`` is the new global optimum.
-
-        Returns ``True`` when a new optimum was recorded.
-        """
-        if fitness >= self.best_fitness:
-            return False
-        self.best_fitness = fitness
-        self.best_config = candidate.model_copy()
-        if verbose:
-            print(f"  -> new best {fitness:.5f}")
-        return True
-
-    def as_summary(self) -> Dict[str, Any]:
-        return {
-            "best_fitness": self.best_fitness,
-            "evaluations": self.evaluations,
-            "cache_hits": self.cache_hits,
-            "wall_time_s": round(self.wall_time_s, 1),
-            "best_config": self.best_config.model_dump() if self.best_config else None,
-        }
 
 
 def one_plus_one_es(

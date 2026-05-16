@@ -18,17 +18,29 @@ class TestMemoizeBy:
         def square(x):
             return x * x
 
-        square(2); square(2); square(3); square(2)
+        # Return values must match the underlying function on hit AND miss.
+        assert square(2) == 4
+        assert square(2) == 4
+        assert square(3) == 9
+        assert square(2) == 4
         assert square.hits == 2
         assert square.misses == 2
-        assert sorted(square.cache) == [2, 3]
+        assert square.cache == {2: 4, 3: 9}
 
     def test_disabled_counts_every_call_as_miss(self):
+        call_count = 0
+
         @memoize_by(lambda x: x, enabled=False)
         def cube(x):
+            nonlocal call_count
+            call_count += 1
             return x * x * x
 
-        cube(2); cube(2); cube(3)
+        # Disabled = pass-through. Same input still invokes the function each time.
+        assert cube(2) == 8
+        assert cube(2) == 8
+        assert cube(3) == 27
+        assert call_count == 3
         assert cube.hits == 0
         assert cube.misses == 3
         assert cube.cache == {}
@@ -38,10 +50,54 @@ class TestMemoizeBy:
         def f(d):
             return d["a"] + d["b"]
 
-        f({"a": 1, "b": 2})
-        f({"b": 2, "a": 1})  # same key, different insertion order
+        # The exact use case in this repo: dict args projected to a hashable key.
+        assert f({"a": 1, "b": 2}) == 3
+        assert f({"b": 2, "a": 1}) == 3  # same key, different insertion order
         assert f.hits == 1
         assert f.misses == 1
+        # Single cache entry — the two dict literals resolve to the same key.
+        assert len(f.cache) == 1
+
+    def test_preserves_name_and_doc_via_functools_wraps(self):
+        @memoize_by(lambda x: x)
+        def fancy_fn(x):
+            """A docstring that must survive the decorator."""
+            return x
+
+        assert fancy_fn.__name__ == "fancy_fn"
+        assert fancy_fn.__doc__ == "A docstring that must survive the decorator."
+
+    def test_exception_is_not_cached(self):
+        n_calls = 0
+
+        @memoize_by(lambda x: x)
+        def maybe_fail(x):
+            nonlocal n_calls
+            n_calls += 1
+            if x < 0:
+                raise ValueError("nope")
+            return x * 2
+
+        with pytest.raises(ValueError):
+            maybe_fail(-1)
+        with pytest.raises(ValueError):
+            maybe_fail(-1)
+        # If exceptions were cached, the second call would not invoke the body.
+        assert n_calls == 2
+        assert maybe_fail.cache == {}
+
+    def test_forwards_extra_positional_and_keyword_args(self):
+        @memoize_by(lambda x: x)
+        def with_extras(x, multiplier, *, offset=0):
+            return x * multiplier + offset
+
+        # Cache is keyed only on first arg, but extras still flow through to fn
+        # on the first (uncached) call.
+        assert with_extras(2, 3, offset=10) == 16
+        # Cached: subsequent calls return the SAME stored value, ignoring extras.
+        assert with_extras(2, 999, offset=999) == 16
+        assert with_extras.hits == 1
+        assert with_extras.misses == 1
 
 
 class TestSearchHistoryConsider:

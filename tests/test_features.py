@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.features import build_technical_features, warmup_rows
+from src.features import WARMUP_ROWS, build_technical_features
 
 
 @pytest.fixture
@@ -35,10 +35,9 @@ def test_returns_all_ten_features(synthetic_ohlcv):
 
 def test_warmup_rows_nan_then_valid(synthetic_ohlcv):
     feat = build_technical_features(synthetic_ohlcv)
-    # First warmup_rows() rows have at least one NaN; after them, all valid.
-    warmup = warmup_rows()
-    assert feat.iloc[:warmup].isna().any().any()
-    assert not feat.iloc[warmup:].isna().any().any()
+    # First WARMUP_ROWS rows have at least one NaN; after them, all valid.
+    assert feat.iloc[:WARMUP_ROWS].isna().any().any()
+    assert not feat.iloc[WARMUP_ROWS:].isna().any().any()
 
 
 def test_no_inf_after_replace(synthetic_ohlcv):

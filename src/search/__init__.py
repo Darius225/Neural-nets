@@ -1,8 +1,8 @@
 """Evolution Strategy variants — generic schema-driven + legacy CNN-specific."""
 
+from .._cache import memoize_by   # re-exported for back-compat
 from .evolution import (
     EvolutionResult,
-    memoize_by,
     mutate_config,
     one_plus_one_es,
     random_config,

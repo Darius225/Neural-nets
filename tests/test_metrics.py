@@ -25,9 +25,12 @@ class TestPersistenceForecast:
         assert np.array_equal(out, yprev)
         assert out.dtype == np.float64
 
-    def test_accepts_list_input(self):
+    def test_accepts_list_input_and_preserves_values(self):
         out = naive_persistence_forecast([1, 2, 3])
         assert isinstance(out, np.ndarray)
+        # Lists must be cast to float arrays with the values intact.
+        assert out.dtype.kind == "f"
+        assert np.array_equal(out, np.array([1.0, 2.0, 3.0]))
 
 
 class TestDirectionalAccuracy:
@@ -129,9 +132,45 @@ class TestComputeMetrics:
         assert m.out_of_train_range_pct is None
         assert m.skill_vs_persistence is None  # no y_prev given
 
-    def test_as_row_keys_present(self):
+    def test_pydantic_rejects_negative_error_fields(self):
+        """MAE / RMSE / MAPE / worst_day_error are non-negative by
+        construction; PredictionMetrics enforces this via Field(ge=0)."""
+        from pydantic import ValidationError
+
+        from src.metrics import PredictionMetrics
+
+        with pytest.raises(ValidationError):
+            PredictionMetrics(
+                n=3, mae=-0.1, rmse=0.0, mape=0.0, r2=1.0,
+                directional_accuracy=50.0, mean_signed_error=0.0,
+                worst_day_error=0.0,
+            )
+
+    def test_pydantic_metrics_are_frozen(self):
+        """Metrics snapshot is immutable — mutating after the fact would
+        invalidate any report it was already written to."""
+        from pydantic import ValidationError
+
+        m = compute_metrics(np.array([1.0, 2.0]), np.array([1.0, 2.0]))
+        with pytest.raises((ValidationError, AttributeError, TypeError)):
+            m.mae = 999.0
+
+    def test_as_row_has_correct_keys_and_values(self):
+        # actual=[1, 2], pred=[1.1, 1.9] -> residuals [+0.1, -0.1]
+        # MAE = 0.1, mean signed = 0.0, worst = 0.1
         m = compute_metrics(np.array([1.0, 2.0]), np.array([1.1, 1.9]))
         row = m.as_row()
+
         for key in ("n", "MAE", "RMSE", "MAPE%", "R2", "DirAcc%",
-                    "MeanSignedErr", "WorstDayErr"):
-            assert key in row
+                    "MeanSignedErr", "WorstDayErr",
+                    "Skill_vs_persist", "OutOfRange%"):
+            assert key in row, f"missing key {key}"
+
+        # Spot-check the actual values too — the rounding alone is non-trivial.
+        assert row["n"] == 2
+        assert row["MAE"] == pytest.approx(0.1)
+        assert row["MeanSignedErr"] == pytest.approx(0.0, abs=1e-9)
+        assert row["WorstDayErr"] == pytest.approx(0.1)
+        # No y_prev / no bounds given -> these stay None in the row.
+        assert row["Skill_vs_persist"] is None
+        assert row["OutOfRange%"] is None

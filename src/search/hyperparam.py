@@ -17,17 +17,17 @@ from __future__ import annotations
 
 import random
 import time
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import tensorflow as tf
 
+from .._cache import memoize_by
 from ..data import Dataset
-from ..models import HYPERPARAMETER_RANGES, build_general_cnn
+from ..models import build_general_cnn
+from ..schemas.configs import HYPERPARAMETER_RANGES
+from ..schemas.results import Individual, SearchHistory
 from ..training import train_on_prepared
-from .evolution import memoize_by
 
-Individual = Dict[str, Any]
 _CacheKey = Tuple[Tuple[str, Any], ...]
 
 
@@ -102,30 +102,6 @@ def evaluate(
         if verbose:
             print(f"[fail] {exc}  {individual}")
         return float("inf")
-
-
-@dataclass
-class SearchHistory:
-    best_fitness_per_iteration: List[float] = field(default_factory=list)
-    best_params: Optional[Individual] = None
-    best_fitness: float = float("inf")
-    cache_hits: int = 0
-    evaluations: int = 0
-
-    def consider(self, candidate: Individual, fitness: float, *, verbose: bool = False) -> bool:
-        """Update best_* if ``fitness`` is the new global optimum.
-
-        Returns ``True`` when a new optimum was recorded. The verbose
-        toggle prints a short progress line — the caller doesn't have
-        to wrap this in its own ``if verbose:``.
-        """
-        if fitness >= self.best_fitness:
-            return False
-        self.best_fitness = fitness
-        self.best_params = dict(candidate)
-        if verbose:
-            print(f"  -> new best {fitness:.4f}")
-        return True
 
 
 def one_plus_one_es(

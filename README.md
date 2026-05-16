@@ -320,7 +320,8 @@ python experiments/walk_forward_eth.py
 python experiments/walk_forward_stocks.py
 ```
 
-Each script saves per-ticker plots into `experiments/plots*/`. Lehman's
+Each script saves per-ticker plots into `experiments/plots*/`
+(gitignored — regenerable by re-running the scripts). Lehman's
 bankruptcy (2008-09-15) is marked on the stock plots; LUNA collapse
 (2022-05-09) and FTX bankruptcy (2022-11-11) on the ETH plot.
 

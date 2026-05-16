@@ -1,126 +1,30 @@
-"""Supervised splits used by the four pipeline versions.
+"""Functions that build the supervised splits.
 
-Four split shapes, increasing in sophistication:
+Four prepare_* functions, one per pipeline version, all returning the
+dataclasses defined in :mod:`src.schemas.splits`:
 
-  - ``Dataset`` + ``prepare_dataset``                — random shuffle-free
-    train/val split on per-day OHLCV (v1 pipeline).
-  - ``TrainTestSplit`` + ``prepare_train_test_split`` — calendar-date
-    split, scaler fit on train only (v1 crisis test).
-  - ``WindowedReturnsSplit`` + ``prepare_windowed_returns_split`` —
-    30-day windows, per-window z-score, next-day return target
-    (v2 / v3 / v5 pipelines, optionally with technical features).
-  - ``MultiTickerSplit`` + ``prepare_multi_ticker_split`` — windows
-    from many tickers stacked into one combined training set (v4).
+  - ``prepare_dataset``                 -> :class:`Dataset` (v1)
+  - ``prepare_train_test_split``        -> :class:`TrainTestSplit` (v1 crisis)
+  - ``prepare_windowed_returns_split``  -> :class:`WindowedReturnsSplit` (v2/v3/v5)
+  - ``prepare_multi_ticker_split``      -> :class:`MultiTickerSplit` (v4)
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, Optional
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
+from ..schemas.splits import (
+    Dataset,
+    MultiTickerSplit,
+    TrainTestSplit,
+    WindowedReturnsSplit,
+)
 from .loaders import FEATURE_COLUMNS, load_csv, slice_by_date
-
-
-@dataclass
-class Dataset:
-    """Bundle of arrays ready to feed a Conv1D model."""
-
-    X_train: np.ndarray
-    X_val: np.ndarray
-    y_train: np.ndarray
-    y_val: np.ndarray
-    scaler: MinMaxScaler
-
-    @property
-    def input_shape(self) -> int:
-        return self.X_train.shape[1]
-
-
-@dataclass
-class TrainTestSplit:
-    """Train/test split with everything needed to compute proper metrics.
-
-    ``y_test_prev`` is the previous trading day's close at each test
-    timestep — the input to the persistence baseline and to directional
-    accuracy. ``train_close_min`` / ``max`` are the price range seen
-    during training, for out-of-range detection on the test set.
-    """
-    X_train: np.ndarray
-    X_test: np.ndarray
-    y_train: np.ndarray
-    y_test: np.ndarray
-    y_test_prev: np.ndarray
-    test_index: pd.Index
-    scaler: MinMaxScaler
-    train_close_min: float
-    train_close_max: float
-
-    @property
-    def input_shape(self) -> int:
-        return self.X_train.shape[1]
-
-
-@dataclass
-class WindowedReturnsSplit:
-    """Train/val/test for the windowed-returns pipeline.
-
-    Each input is a ``(window_size, n_features)`` slice; each target is
-    the *next-day simple return* ``(close[t+1] - close[t]) / close[t]``.
-    The window is z-scored per-window per-feature so the model is
-    invariant to absolute price level — handles regime shifts naturally.
-
-    To recover a predicted price from a predicted return:
-        predicted_close[t+1] = close_at_t * (1 + predicted_return)
-    """
-    X_train: np.ndarray
-    X_val: np.ndarray
-    X_test: np.ndarray
-    y_train: np.ndarray
-    y_val: np.ndarray
-    y_test: np.ndarray
-    close_at_t_test: np.ndarray   # close[t] for each test sample
-    actual_close_test: np.ndarray  # close[t+1] — what we're predicting
-    test_index: pd.Index
-    train_close_min: float
-    train_close_max: float
-    window_size: int
-    n_features: int
-
-    @property
-    def input_shape(self) -> Tuple[int, int]:
-        return self.window_size, self.n_features
-
-
-@dataclass
-class MultiTickerSplit:
-    """Combined training set across many tickers + per-ticker test sets.
-
-    The premise: each ticker is just one realisation of "how stocks
-    behave". Train on samples from many tickers to learn the common
-    structure, then evaluate per-ticker on the held-out crisis window.
-
-    All inputs use the same windowed-returns shape (per-window z-score),
-    so a single CNN trained on the combined set can score any test
-    ticker.
-    """
-    X_train: np.ndarray
-    X_val: np.ndarray
-    y_train: np.ndarray
-    y_val: np.ndarray
-    per_ticker_test: Dict[str, "WindowedReturnsSplit"]
-    n_features: int
-    window_size: int
-    train_tickers: list
-    test_tickers: list
-
-    @property
-    def input_shape(self) -> Tuple[int, int]:
-        return self.window_size, self.n_features
 
 
 # -------------------------------- helpers ----------------------------------

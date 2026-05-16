@@ -1,8 +1,11 @@
-"""Metrics for next-day-close stock prediction.
+"""Metric functions for next-day-close stock prediction.
 
 Going beyond MAE/MAPE because, for stocks, those numbers can look great
 while the model is useless — a "predict tomorrow = today" baseline is
 remarkably hard to beat. The metrics here are designed to expose that.
+
+The result schema lives in :class:`src.schemas.metrics.PredictionMetrics`.
+This module hosts the *functions* that compute it.
 
 Key concept: the **skill score** vs naive persistence is the single most
 honest measure. ``skill_vs_persistence(y_true, y_pred, y_prev) > 0`` means
@@ -11,45 +14,11 @@ the model is genuinely doing better than just echoing yesterday's close.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 
-
-@dataclass
-class PredictionMetrics:
-    """Bundle of regression + trading + risk metrics for a forecast.
-
-    All errors are in the price units (e.g. USD); ``mape`` and
-    ``directional_accuracy`` are percentages.
-    """
-    n: int
-    mae: float
-    rmse: float
-    mape: float
-    r2: float
-    directional_accuracy: float
-    mean_signed_error: float
-    worst_day_error: float
-    skill_vs_persistence: Optional[float] = None
-    out_of_train_range_pct: Optional[float] = None
-
-    def as_row(self) -> dict:
-        return {
-            "n": self.n,
-            "MAE": round(self.mae, 4),
-            "RMSE": round(self.rmse, 4),
-            "MAPE%": round(self.mape, 3),
-            "R2": round(self.r2, 4),
-            "DirAcc%": round(self.directional_accuracy, 2),
-            "MeanSignedErr": round(self.mean_signed_error, 4),
-            "WorstDayErr": round(self.worst_day_error, 4),
-            "Skill_vs_persist": None if self.skill_vs_persistence is None
-                else round(self.skill_vs_persistence, 4),
-            "OutOfRange%": None if self.out_of_train_range_pct is None
-                else round(self.out_of_train_range_pct, 2),
-        }
+from .schemas.metrics import PredictionMetrics
 
 
 def naive_persistence_forecast(y_prev: np.ndarray) -> np.ndarray:

@@ -1,5 +1,16 @@
-"""Data loading and supervised splits."""
+"""Data loading and supervised splits.
 
+Split *schemas* live in :mod:`src.schemas.splits`; the ``prepare_*``
+functions that produce them live in :mod:`.splits` (this subpackage).
+Both are re-exported here for convenient single-line imports.
+"""
+
+from ..schemas.splits import (
+    Dataset,
+    MultiTickerSplit,
+    TrainTestSplit,
+    WindowedReturnsSplit,
+)
 from .loaders import (
     DEFAULT_CSV_GLOB,
     DEFAULT_DATE_FORMAT,
@@ -10,10 +21,6 @@ from .loaders import (
     slice_by_date,
 )
 from .splits import (
-    Dataset,
-    MultiTickerSplit,
-    TrainTestSplit,
-    WindowedReturnsSplit,
     prepare_dataset,
     prepare_multi_ticker_split,
     prepare_train_test_split,

@@ -9,34 +9,21 @@ hyperparameter search — same topology, all knobs exposed.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from tensorflow.keras import Sequential
 from tensorflow.keras.layers import Conv1D, Dense, Dropout, Flatten
 from tensorflow.keras.losses import Huber
 from tensorflow.keras.optimizers import Adam
 
-from .configs import ReturnsCNNConfig
-
-HYPERPARAMETER_RANGES: Dict[str, List[Any]] = {
-    "number_of_filters": list(range(32, 1024)),
-    "kernel_size": list(range(1, 6)),
-    "activation_in_convolution": ["relu", "sigmoid", "tanh", "linear", "swish"],
-    "activation_in_dense_layer": ["relu", "linear", "swish"],
-    "nodes_in_dense_layer": list(range(10, 1024)),
-    "optimizer": ["adam", "rmsprop", "sgd", "adagrad"],
-    "loss": ["mean_squared_error", "mean_absolute_error", "huber_loss"],
-}
-
-BEST_HYPERPARAMETERS: Dict[str, Any] = {
-    "number_of_filters": 256,
-    "kernel_size": 5,
-    "activation_in_convolution": "relu",
-    "activation_in_dense_layer": "relu",
-    "nodes_in_dense_layer": 150,
-    "optimizer": "adam",
-    "loss": "mse",
-}
+# Re-exported here for back-compat with code that did
+# `from src.models import HYPERPARAMETER_RANGES`. New code should import
+# from src.schemas (or src.schemas.configs).
+from .schemas.configs import (  # noqa: F401
+    BEST_HYPERPARAMETERS,
+    HYPERPARAMETER_RANGES,
+    ReturnsCNNConfig,
+)
 
 
 def build_best_cnn(input_shape: int, params: Optional[Dict[str, Any]] = None) -> Sequential:

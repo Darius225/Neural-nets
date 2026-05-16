@@ -7,7 +7,6 @@ Replaces the duplicated ``manual_training_for_company`` and
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
 import pandas as pd
@@ -17,26 +16,12 @@ from tensorflow.keras.callbacks import EarlyStopping
 from .data import Dataset, prepare_dataset
 from .models import build_best_cnn, build_general_cnn
 from .plotting import plot_training_curve
+from .schemas.results import TrainingResult
 
 ModelFactory = Callable[..., Model]
 
 DEFAULT_EPOCHS = 300
 DEFAULT_BATCH_SIZE = 50
-
-
-@dataclass
-class TrainingResult:
-    model: Model
-    dataset: Dataset
-    history: Dict[str, list]
-
-    @property
-    def final_val_mape(self) -> float:
-        return float(self.history["val_mape"][-1])
-
-    @property
-    def final_val_mae(self) -> float:
-        return float(self.history["val_mae"][-1])
 
 
 def train_on_prepared(

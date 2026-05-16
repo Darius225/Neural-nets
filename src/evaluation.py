@@ -1,12 +1,13 @@
 """Evaluation on held-out / unseen data.
 
 Original ``predict_and_evaluate_on_new_data`` silently discarded both
-the predictions and the metric values. This version returns them.
+the predictions and the metric values. This version returns an
+:class:`EvaluationResult` (defined in :mod:`src.schemas.results`) so
+callers can keep both predictions and computed errors.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Sequence
 
 import numpy as np
@@ -15,23 +16,7 @@ from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras import Model
 
 from .data import FEATURE_COLUMNS
-
-
-@dataclass
-class EvaluationResult:
-    predictions: np.ndarray
-    actual: np.ndarray
-    mae: float
-    mape: float
-
-    def as_dataframe(self) -> pd.DataFrame:
-        return pd.DataFrame(
-            {
-                "actual": self.actual,
-                "predicted": self.predictions,
-                "abs_error": np.abs(self.actual - self.predictions),
-            }
-        )
+from .schemas.results import EvaluationResult
 
 
 def predict_and_evaluate(

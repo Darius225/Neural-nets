@@ -15,6 +15,13 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+# Longest lookback in :func:`build_technical_features` is the 20-day
+# rolling std for ``vol_20`` / ``bb_position``. The first WARMUP_ROWS
+# rows of any feature frame contain NaNs and must be dropped before
+# windowing. Exposed as a module constant rather than a function
+# because the value is structural, not computed.
+WARMUP_ROWS = 20
+
 
 def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
     """Wilder's RSI — classic momentum oscillator (0-100)."""
@@ -87,11 +94,3 @@ def build_technical_features(df: pd.DataFrame) -> pd.DataFrame:
     return out.replace([np.inf, -np.inf], np.nan)
 
 
-def warmup_rows(feature_names: list[str] | None = None) -> int:
-    """How many rows at the start of the series are NaN.
-
-    Longest lookback in :func:`build_technical_features` is the 20-day
-    rolling std for ``vol_20`` / ``bb_position``. After 20 rows we have
-    valid features.
-    """
-    return 20
