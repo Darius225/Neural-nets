@@ -41,5 +41,8 @@ stock_market_data/
 Stocks/
 ibm.us.txt
 
+# Trained models saved by scripts/train_and_save.py (regenerable).
+models/
+
 # Old scratchpad notebooks (kept locally only).
 attempting.ipynb

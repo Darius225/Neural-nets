@@ -152,6 +152,39 @@ pip install -e .[dev]            # uses pyproject.toml
 Training data (S&P 500 CSVs from the Kaggle dump) is *not* in the
 repo. Drop the files into `stock_market_data/sp500/csv/` to reproduce.
 
+## Predict on fresh data
+
+Train a model for one ticker and save it, then run predictions:
+
+```bash
+python scripts/train_and_save.py JPM            # writes models/JPM.keras
+python scripts/predict.py JPM                   # loads + prints next-day prediction
+```
+
+For tickers not in the local CSV dump (or for crypto), fetch live via
+yfinance:
+
+```bash
+python scripts/train_and_save.py ETH-USD --source yfinance \
+    --train-end 2022-06-30 --test-end 2024-01-01
+python scripts/predict.py ETH-USD --source yfinance
+```
+
+`scripts/predict.py` output:
+
+```
+ticker:           JPM
+last close:       $148.72  (2024-12-13)
+predicted return: +0.0021%
+predicted close:  $148.72  (next trading day)
+
+note: experimental skill score vs persistence is near zero — treat
+as a methodology demo, not a trading signal.
+```
+
+The disclaimer is intentional. The point of this repo is to show
+*how* to backtest honestly, not to sell predictions.
+
 ## Reproducing the experiments
 
 ```bash
