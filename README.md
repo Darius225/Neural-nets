@@ -14,6 +14,32 @@ that conclusion: five iterations of progressively better methodology,
 each one a separate commit, each one with a reproducible experiment
 and saved plots.
 
+## Quick start
+
+```bash
+git clone https://github.com/darius225/Neural-nets.git
+cd Neural-nets
+uv sync                                                    # ~2-3 s with cache
+
+# stocks — full 10-ticker 2008 crisis backtest (~5 min)
+uv run python experiments/crisis_2008_v3.py
+
+# crypto — ETH-USD through the LUNA + FTX shocks
+uv run python scripts/fetch_binance.py ETHUSDT --start 2018-01-01 --end 2024-01-01
+uv run python experiments/crypto_eth_v3.py
+
+# predict tomorrow's close for a ticker you trained on
+uv run python scripts/train_and_save.py JPM
+uv run python scripts/predict.py JPM
+
+# the test suite
+uv run pytest tests/ -v
+```
+
+If you don't have [uv](https://docs.astral.sh/uv/), `pip install -e .[dev]`
+gives you the same environment more slowly. Full setup details are in
+[Setup](#setup) below.
+
 ## Results across five iterations
 
 All five evaluate the same 10 S&P 500 tickers (JPM, BAC, C, MSFT, AAPL,
@@ -173,6 +199,15 @@ python scripts/train_and_save.py ETH-USD --source yfinance \
 python scripts/predict.py ETH-USD --source yfinance
 ```
 
+When yfinance is rate-limited or otherwise broken (a common 2024-2025
+problem on crypto), pull OHLCV directly from Binance's public REST
+API instead:
+
+```bash
+python scripts/fetch_binance.py ETHUSDT --start 2018-01-01 --end 2024-01-01
+# writes stock_market_data/crypto/csv/ETHUSDT.csv in Kaggle format
+```
+
 `scripts/predict.py` output:
 
 ```
@@ -205,10 +240,15 @@ python experiments/multi_ticker_v4.py
 
 # v5 — (1+1)-ES on the returns CNN's hyperparameters, validated on 10 tickers
 python experiments/evolve_returns_v5.py
+
+# crypto — same v3 pipeline on ETH-USD with LUNA + FTX in the test window
+python scripts/fetch_binance.py ETHUSDT --start 2018-01-01 --end 2024-01-01
+python experiments/crypto_eth_v3.py
 ```
 
 Each script saves per-ticker plots into `experiments/plots*/`. Lehman's
-bankruptcy (2008-09-15) is marked with a vertical line.
+bankruptcy (2008-09-15) is marked on the stock plots; LUNA collapse
+(2022-05-09) and FTX bankruptcy (2022-11-11) on the ETH plot.
 
 ## Benchmarks
 
