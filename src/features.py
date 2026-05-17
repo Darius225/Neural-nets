@@ -15,12 +15,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-# Longest lookback in :func:`build_technical_features` is the 20-day
-# rolling std for ``vol_20`` / ``bb_position``. The first WARMUP_ROWS
-# rows of any feature frame contain NaNs and must be dropped before
-# windowing. Exposed as a module constant rather than a function
-# because the value is structural, not computed.
-WARMUP_ROWS = 20
+# Longest lookback in :func:`build_technical_features` is now the
+# 22-day HAR-RV feature ``rv_22``. The first WARMUP_ROWS rows of any
+# feature frame contain NaNs and must be dropped before windowing.
+WARMUP_ROWS = 22
 
 
 def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
@@ -36,13 +34,21 @@ def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
 
 
 def build_technical_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute 10 derived features from OHLCV.
+    """Compute derived features from OHLCV.
+
+    Features 1-10 are the original technical-indicator stack. Features
+    11-13 are HAR-RV style realised-volatility aggregates at 1 / 5 / 22
+    day horizons (Corsi 2009, *A Simple Approximate Long-Memory Model of
+    Realized Volatility*). These three are the classical predictors for
+    next-period realised vol — they capture short / medium / long-memory
+    components of the vol process and are by far the strongest single
+    addition for the volatility prediction task in this repo.
 
     All features are scale-invariant or already-normalised — the model
     sees momentum, volatility, and trend position rather than dollar
     amounts. Per-window z-scoring downstream will further normalise.
 
-    Returns a DataFrame with NaNs in the first ~20 rows (warmup); drop
+    Returns a DataFrame with NaNs in the first ~22 rows (warmup); drop
     before windowing.
     """
     out = pd.DataFrame(index=df.index)
@@ -89,6 +95,20 @@ def build_technical_features(df: pd.DataFrame) -> pd.DataFrame:
     #     open == 0 (some early CSVs) by mapping to NaN, dropped later.
     safe_open = open_.where(open_ != 0)
     out["co_gap_pct"] = (close - safe_open) / safe_open
+
+    # 11-13. HAR-RV components. Realised volatility is annualised-style
+    # normalised so the three scales are directly comparable:
+    #   rv_h = sqrt( mean( log_return**2 over the last h days ) )
+    # which equals sqrt(sum / h). At h=1 it's just |log_return| (a noisy
+    # one-day vol estimate); at h=22 it's a smoother monthly RV; at h=5
+    # it's the weekly component. Corsi (2009) shows linear combinations
+    # of these three explain a remarkable amount of next-day RV
+    # variance — they're the single most impactful feature addition for
+    # vol forecasting.
+    sq = log_return**2
+    out["rv_1"] = np.sqrt(sq)
+    out["rv_5"] = np.sqrt(sq.rolling(5).mean())
+    out["rv_22"] = np.sqrt(sq.rolling(22).mean())
 
     # Final safety net: replace any inf with NaN so dropna() handles them.
     return out.replace([np.inf, -np.inf], np.nan)

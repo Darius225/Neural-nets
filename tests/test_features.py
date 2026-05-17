@@ -23,9 +23,10 @@ def synthetic_ohlcv() -> pd.DataFrame:
     )
 
 
-def test_returns_all_ten_features(synthetic_ohlcv):
+def test_returns_all_features(synthetic_ohlcv):
     feat = build_technical_features(synthetic_ohlcv)
     expected = {
+        # 10 original technical indicators
         "log_return",
         "vol_10",
         "vol_20",
@@ -36,6 +37,10 @@ def test_returns_all_ten_features(synthetic_ohlcv):
         "volume_z",
         "hl_range_pct",
         "co_gap_pct",
+        # 3 HAR-RV components (Corsi 2009)
+        "rv_1",
+        "rv_5",
+        "rv_22",
     }
     assert set(feat.columns) == expected
     assert len(feat) == len(synthetic_ohlcv)
