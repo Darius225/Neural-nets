@@ -13,13 +13,22 @@ of out-of-sample folds:**
    from public daily OHLCV alone — confirmed across 10 S&P 500 tickers
    (2008 crisis) and ETH/BTC (2022 LUNA/FTX). Mean IC ≈ 0, t-stat
    indistinguishable from noise. Weak-form market efficiency holds.
-2. **Next-day *volatility* IS predictable.** Same architecture,
-   same features, same walk-forward folds — only the target changes
-   from `return[t+1]` to `|log_return[t+1]|`. Mean skill score vs the
-   yesterday-volatility-persistence baseline: **+0.34** (t-stat 13.45,
-   p < 0.01) across 6 ETH+BTC folds, **positive in all six** including
-   the LUNA/FTX 2022 fold. This matches the GARCH-literature range
-   for one-day-ahead realised-volatility forecasts (~+0.20-0.40).
+2. **Next-day *volatility* IS predictable** — confirmed across both
+   asset classes. Same architecture, same features, same walk-forward
+   folds — only the target changes from `return[t+1]` to
+   `|log_return[t+1]|`. Mean skill score vs the
+   yesterday-volatility-persistence baseline:
+
+   | Panel | Mean skill | t-stat | n > 0 |
+   |---|---|---|---|
+   | ETH + BTC, 6 folds | **+0.34** | **+13.45** (p<0.01) | 6/6 |
+   | 10 S&P 500 tickers, 60 cells | **+0.22** | **+6.54** (p<0.001) | 51/60 |
+
+   Both panels are clearly significant; crypto is slightly more
+   clustered than equities (documented in the GARCH literature). The
+   2008 crisis fold on stocks is the hardest year (mean +0.04, 6/10
+   positive) but volatility still doesn't fail catastrophically the
+   way return prediction does — vol is more robust to regime shifts.
 
 The methodology section is where the value is — not the (deliberately
 modest) architecture.
@@ -53,6 +62,9 @@ uv run python experiments/walk_forward_stocks.py
 # the volatility pivot — the first experiment that produces a real
 # positive skill score (mean +0.34, t-stat +13.45, p < 0.01)
 uv run python experiments/walk_forward_vol_eth.py
+
+# cross-asset confirmation on stocks (60-cell panel, t-stat +6.54, p<0.001)
+uv run python experiments/walk_forward_vol_stocks.py
 
 # predict tomorrow's close for a ticker you trained on
 uv run python scripts/train_and_save.py JPM
