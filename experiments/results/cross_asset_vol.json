@@ -1,0 +1,166 @@
+{
+  "settings": {
+    "window_size": 30,
+    "epochs": 40,
+    "patience": 6,
+    "batch_size": 64,
+    "seed": 42,
+    "train_end": "2021-12-31",
+    "test_start": "2022-01-01",
+    "test_end": "2022-09-30",
+    "out_path": "experiments/results/cross_asset_vol.json"
+  },
+  "per_ticker": [
+    {
+      "asset_class": "equities",
+      "ticker": "JPM",
+      "n_train": 9551,
+      "n_test": 158,
+      "epochs_run": 15,
+      "ic": -0.06339894406005199,
+      "skill": 0.3593545090671687,
+      "mae_model_pct": 0.9117349050939083,
+      "mae_persist_pct": 1.2248971499502659
+    },
+    {
+      "asset_class": "equities",
+      "ticker": "MSFT",
+      "n_train": 8974,
+      "n_test": 158,
+      "epochs_run": 12,
+      "ic": NaN,
+      "skill": 0.37973144739884435,
+      "mae_model_pct": 1.0157653130590916,
+      "mae_persist_pct": 1.447165198624134
+    },
+    {
+      "asset_class": "equities",
+      "ticker": "AAPL",
+      "n_train": 10300,
+      "n_test": 158,
+      "epochs_run": 16,
+      "ic": NaN,
+      "skill": 0.4497687196151169,
+      "mae_model_pct": 1.0713138617575169,
+      "mae_persist_pct": 1.5303497202694416
+    },
+    {
+      "asset_class": "equities",
+      "ticker": "IBM",
+      "n_train": 13066,
+      "n_test": 158,
+      "epochs_run": 15,
+      "ic": 0.028939047351116864,
+      "skill": 0.3984617988379465,
+      "mae_model_pct": 0.660875765606761,
+      "mae_persist_pct": 0.9362723678350449
+    },
+    {
+      "asset_class": "equities",
+      "ticker": "XOM",
+      "n_train": 13066,
+      "n_test": 158,
+      "epochs_run": 14,
+      "ic": 0.0396306840123002,
+      "skill": 0.23170220245473527,
+      "mae_model_pct": 1.2181923724710941,
+      "mae_persist_pct": 1.480375975370407
+    },
+    {
+      "asset_class": "crypto",
+      "ticker": "ETHUSDT",
+      "n_train": 1409,
+      "n_test": 243,
+      "epochs_run": 10,
+      "ic": -0.018275127398382347,
+      "skill": 0.44504625528441766,
+      "mae_model_pct": 2.3160066455602646,
+      "mae_persist_pct": 3.288174048066139
+    },
+    {
+      "asset_class": "crypto",
+      "ticker": "BTCUSDT",
+      "n_train": 1409,
+      "n_test": 243,
+      "epochs_run": 12,
+      "ic": 0.023150448738367486,
+      "skill": 0.4744512775219403,
+      "mae_model_pct": 1.767159253358841,
+      "mae_persist_pct": 2.599910832941532
+    },
+    {
+      "asset_class": "crypto",
+      "ticker": "SOLUSDT",
+      "n_train": 456,
+      "n_test": 243,
+      "epochs_run": 13,
+      "ic": -0.014529028364022945,
+      "skill": 0.3334058988616597,
+      "mae_model_pct": 2.9064882546663284,
+      "mae_persist_pct": 3.7989404052495956
+    },
+    {
+      "asset_class": "crypto",
+      "ticker": "BNBUSDT",
+      "n_train": 679,
+      "n_test": 243,
+      "epochs_run": 13,
+      "ic": -0.0726239712142398,
+      "skill": 0.3954425861324101,
+      "mae_model_pct": 1.961020939052105,
+      "mae_persist_pct": 2.5735219940543175
+    },
+    {
+      "asset_class": "crypto",
+      "ticker": "AVAXUSDT",
+      "n_train": 414,
+      "n_test": 243,
+      "epochs_run": 10,
+      "ic": 0.019650800840959097,
+      "skill": 0.3964470149210799,
+      "mae_model_pct": 3.26218418776989,
+      "mae_persist_pct": 4.027052596211433
+    },
+    {
+      "asset_class": "commodity",
+      "ticker": "PAXGUSDT",
+      "n_train": 439,
+      "n_test": 243,
+      "epochs_run": 14,
+      "ic": 0.04200533153228817,
+      "skill": 0.30569195979192554,
+      "mae_model_pct": 0.4621489904820919,
+      "mae_persist_pct": 0.5548038054257631
+    }
+  ],
+  "per_class": [
+    {
+      "asset_class": "equities",
+      "n_tickers": 5,
+      "mean_skill": 0.36380373547476236,
+      "stdev_skill": 0.08111020666867667,
+      "mean_ic": 0.0017235957677883597,
+      "n_positive_skill": 5,
+      "t_stat": 10.029439159400834
+    },
+    {
+      "asset_class": "crypto",
+      "n_tickers": 5,
+      "mean_skill": 0.4089586065443015,
+      "stdev_skill": 0.05394219756896011,
+      "mean_ic": -0.012525375479463701,
+      "n_positive_skill": 5,
+      "t_stat": 16.952576747500824
+    },
+    {
+      "asset_class": "commodity",
+      "n_tickers": 1,
+      "mean_skill": 0.30569195979192554,
+      "stdev_skill": NaN,
+      "mean_ic": 0.04200533153228817,
+      "n_positive_skill": 1,
+      "t_stat": NaN
+    }
+  ],
+  "wall_time_s": 69.64823889732361
+}
