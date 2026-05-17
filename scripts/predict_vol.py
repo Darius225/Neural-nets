@@ -239,6 +239,17 @@ def main() -> None:
     last_date = df.index[-1].date()
     last_close = float(df["Close"].iloc[-1])
 
+    # Multipliers that convert the model's predicted |log_return| / RV
+    # into N-percent price bands. Assumes log-returns ~ N(0, sigma^2)
+    # where the model's output is an estimate of E[|X|] = sigma * sqrt(2/pi).
+    # So sigma_hat = pred * sqrt(pi/2). z-scores for two-sided bands:
+    BANDS = [
+        ("50%", 0.6745),
+        ("68%", 1.0000),
+        ("95%", 1.9600),
+    ]
+    EABS_TO_SIGMA = float(np.sqrt(np.pi / 2))  # ~1.2533
+
     print(f"\nretraining one model per horizon h in {horizons} for the fan forecast...")
     horizon_results = []
     for h in horizons:
@@ -249,44 +260,75 @@ def main() -> None:
             continue
         cut_h = int(len(X_h) * 0.85)
         model_h = train_model(X_h[:cut_h], y_h[:cut_h], X_h[cut_h:], y_h[cut_h:])
-        pred_h = float(np.maximum(model_h.predict(X_now, verbose=0)[0, 0], 0.0))
-        # Implied 1-sigma price range over `h` calendar days
-        up_h = last_close * np.exp(+pred_h)
-        down_h = last_close * np.exp(-pred_h)
+
+        # Empirical bias correction from the validation slice — fixes the
+        # systematic under-prediction observed across all our experiments
+        # (pred_mean / actual_mean ~ 0.7 on ETH; the model is conservative).
+        val_pred = np.maximum(model_h.predict(X_h[cut_h:], verbose=0).flatten(), 0.0)
+        val_actual = y_h[cut_h:]
+        if val_pred.mean() > 0:
+            calibration = float(val_actual.mean() / val_pred.mean())
+        else:
+            calibration = 1.0
+
+        pred_raw = float(np.maximum(model_h.predict(X_now, verbose=0)[0, 0], 0.0))
+        pred_cal = pred_raw * calibration  # bias-corrected
+        sigma_hat = pred_cal * EABS_TO_SIGMA  # convert E[|X|] -> sigma
+
         target_date = last_date + pd.Timedelta(days=h)
+        bands = {}
+        for label, z in BANDS:
+            bands[label] = (
+                last_close * float(np.exp(-z * sigma_hat)),
+                last_close * float(np.exp(+z * sigma_hat)),
+            )
+
         horizon_results.append(
             {
                 "h": h,
-                "pred_vol": pred_h,
-                "up": up_h,
-                "down": down_h,
+                "pred_raw": pred_raw,
+                "calibration": calibration,
+                "pred_cal": pred_cal,
+                "sigma_hat": sigma_hat,
+                "bands": bands,
                 "target_date": target_date,
             }
         )
         print(
-            f"  h={h:>2}d -> realised-vol forecast {pred_h * 100:.3f}%  "
-            f"(${down_h:.2f} .. ${up_h:.2f} by {target_date})"
+            f"  h={h:>2}d raw_pred={pred_raw * 100:>5.2f}%  "
+            f"calibration={calibration:>4.2f}x  "
+            f"sigma_hat={sigma_hat * 100:>5.2f}%  "
+            f"(by {target_date})"
         )
 
-    print(f"\n{'-' * 70}")
-    print(f"  FAN FORECAST ({args.ticker})")
-    print(f"{'-' * 70}")
-    print(f"  last close ({last_date}): ${last_close:.4f}\n")
-    print(
-        f"  {'horizon':<12}{'realised-vol':>15}{'low (1sd)':>12}{'high (1sd)':>12}{'by date':>14}"
-    )
-    print(f"  {'-' * 65}")
+    print(f"\n{'-' * 78}")
+    print(f"  CALIBRATED FAN FORECAST ({args.ticker})")
+    print(f"{'-' * 78}")
+    print(f"  last close ({last_date}): ${last_close:.4f}")
+    print("  bands derived from bias-corrected sigma, assuming Gaussian log-returns.\n")
+    print(f"  {'horizon':<12}{'sigma':>10}{'50% band':>20}{'68% band':>20}{'95% band':>20}")
+    print(f"  {'-' * 80}")
     for r in horizon_results:
+        b50 = r["bands"]["50%"]
+        b68 = r["bands"]["68%"]
+        b95 = r["bands"]["95%"]
         print(
-            f"  {r['h']:>2}-day fwd  {r['pred_vol'] * 100:>13.3f}%"
-            f"{r['down']:>12.2f}{r['up']:>12.2f}  {r['target_date']!s:>12}"
+            f"  {r['h']:>2}-day fwd  {r['sigma_hat'] * 100:>8.2f}%"
+            f"  ${b50[0]:>7.2f}-${b50[1]:>7.2f}"
+            f"  ${b68[0]:>7.2f}-${b68[1]:>7.2f}"
+            f"  ${b95[0]:>7.2f}-${b95[1]:>7.2f}"
         )
 
     print()
-    print("  Each row's 'low/high (1sd)' is the price range implied by the model's")
-    print("  predicted realised volatility for that horizon (price * exp(±vol)).")
-    print("  Wider bands further out reflect cumulative uncertainty. These are")
-    print("  MAGNITUDE forecasts, NOT direction. Use as risk / sizing input.")
+    print("  How to read this:")
+    print("    50% band = most likely outcome (coin flip if price stays inside).")
+    print("    68% band = standard 1-sigma; typical risk-management default.")
+    print("    95% band = stress range; price exits with ~5% probability.")
+    print()
+    print("  Bias correction: validation set told us the raw CNN under-predicts")
+    print("  magnitude by the factor shown above. The bands use the calibrated")
+    print("  sigma, so they're closer to the empirical truth than the raw model.")
+    print("  These remain MAGNITUDE forecasts — they bound the price, not direct it.")
 
 
 if __name__ == "__main__":
