@@ -122,9 +122,11 @@ def build_vol_windows(features: np.ndarray, closes: np.ndarray, horizon: int = 1
     return X, y, baseline
 
 
-def train_model(X_tr: np.ndarray, y_tr: np.ndarray, X_val: np.ndarray, y_val: np.ndarray):
+def train_model(
+    X_tr: np.ndarray, y_tr: np.ndarray, X_val: np.ndarray, y_val: np.ndarray, seed: int = SEED
+):
     tf.keras.backend.clear_session()
-    set_seed(SEED)
+    set_seed(seed)
     model = build_returns_cnn(WINDOW_SIZE, X_tr.shape[2], config=CONFIG)
     model.fit(
         X_tr,
@@ -156,10 +158,19 @@ def main() -> None:
         help="comma-separated forecast horizons in days for the final fan forecast "
         "(default '1,5,10'). One model is retrained per horizon.",
     )
+    p.add_argument(
+        "--ensemble-size",
+        type=int,
+        default=1,
+        help="number of independently-seeded models to average for the fan forecast "
+        "(default 1 = no ensembling). 5 is a sensible value that ~halves seed noise.",
+    )
     args = p.parse_args()
     horizons = sorted({int(h) for h in args.horizons.split(",") if h.strip()})
     if not horizons or min(horizons) < 1:
         raise SystemExit("--horizons must be a comma list of positive integers, e.g. '1,5,10'")
+    if args.ensemble_size < 1:
+        raise SystemExit("--ensemble-size must be >= 1")
 
     csv_path = find_csv(args.ticker, args.source)
     print(f"loading {csv_path}...")
@@ -209,7 +220,7 @@ def main() -> None:
     )
     print(f"  {'-' * 82}")
     n_wins = 0
-    for d, p_, a_, pe_ in zip(dates_test, preds, y_test, persist_test):
+    for d, p_, a_, pe_ in zip(dates_test, preds, y_test, persist_test, strict=False):
         err_m = abs(p_ - a_)
         err_p = abs(pe_ - a_)
         winner = "MODEL" if err_m < err_p else "persist"
@@ -250,7 +261,9 @@ def main() -> None:
     ]
     EABS_TO_SIGMA = float(np.sqrt(np.pi / 2))  # ~1.2533
 
-    print(f"\nretraining one model per horizon h in {horizons} for the fan forecast...")
+    ens_n = args.ensemble_size
+    ens_note = f"ensemble of {ens_n} seeds" if ens_n > 1 else "single model"
+    print(f"\nretraining for the fan forecast ({ens_note} per horizon)...")
     horizon_results = []
     for h in horizons:
         try:
@@ -259,19 +272,33 @@ def main() -> None:
             print(f"  [skip h={h}] {exc}")
             continue
         cut_h = int(len(X_h) * 0.85)
-        model_h = train_model(X_h[:cut_h], y_h[:cut_h], X_h[cut_h:], y_h[cut_h:])
+        X_h_val = X_h[cut_h:]
+        y_h_val = y_h[cut_h:]
+
+        # Ensemble across N seeds reduces single-seed noise. For each seed,
+        # collect predictions on the validation slice + tomorrow's window,
+        # then average.
+        val_preds_per_seed = []
+        future_preds_per_seed = []
+        for k in range(ens_n):
+            seed_k = SEED + k
+            model_k = train_model(X_h[:cut_h], y_h[:cut_h], X_h_val, y_h_val, seed=seed_k)
+            val_preds_per_seed.append(
+                np.maximum(model_k.predict(X_h_val, verbose=0).flatten(), 0.0)
+            )
+            future_preds_per_seed.append(
+                float(np.maximum(model_k.predict(X_now, verbose=0)[0, 0], 0.0))
+            )
+        val_pred = np.mean(val_preds_per_seed, axis=0)
+        pred_raw = float(np.mean(future_preds_per_seed))
+        ens_spread = float(np.std(future_preds_per_seed)) if ens_n > 1 else 0.0
 
         # Empirical bias correction from the validation slice — fixes the
         # systematic under-prediction observed across all our experiments
         # (pred_mean / actual_mean ~ 0.7 on ETH; the model is conservative).
-        val_pred = np.maximum(model_h.predict(X_h[cut_h:], verbose=0).flatten(), 0.0)
-        val_actual = y_h[cut_h:]
-        if val_pred.mean() > 0:
-            calibration = float(val_actual.mean() / val_pred.mean())
-        else:
-            calibration = 1.0
+        val_actual = y_h_val
+        calibration = float(val_actual.mean() / val_pred.mean()) if val_pred.mean() > 0 else 1.0
 
-        pred_raw = float(np.maximum(model_h.predict(X_now, verbose=0)[0, 0], 0.0))
         pred_cal = pred_raw * calibration  # bias-corrected
         sigma_hat = pred_cal * EABS_TO_SIGMA  # convert E[|X|] -> sigma
 
@@ -287,6 +314,7 @@ def main() -> None:
             {
                 "h": h,
                 "pred_raw": pred_raw,
+                "ens_spread": ens_spread,
                 "calibration": calibration,
                 "pred_cal": pred_cal,
                 "sigma_hat": sigma_hat,
@@ -294,8 +322,9 @@ def main() -> None:
                 "target_date": target_date,
             }
         )
+        spread_note = f"  spread={ens_spread * 100:>4.2f}%" if ens_n > 1 else ""
         print(
-            f"  h={h:>2}d raw_pred={pred_raw * 100:>5.2f}%  "
+            f"  h={h:>2}d raw_pred={pred_raw * 100:>5.2f}%{spread_note}  "
             f"calibration={calibration:>4.2f}x  "
             f"sigma_hat={sigma_hat * 100:>5.2f}%  "
             f"(by {target_date})"
