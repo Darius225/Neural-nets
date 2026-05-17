@@ -83,22 +83,43 @@ def find_csv(ticker: str, source: str) -> Path:
     )
 
 
-def build_vol_windows(features: np.ndarray, closes: np.ndarray):
-    """Sliding windows + per-window z-score, target = |log_return[t+1]|."""
-    n = len(features)
-    log_returns = np.log(closes[1:] / closes[:-1])
-    abs_log_returns = np.abs(log_returns).astype(np.float32)
+def build_vol_windows(features: np.ndarray, closes: np.ndarray, horizon: int = 1):
+    """Sliding windows + per-window z-score.
 
-    n_windows = n - WINDOW_SIZE
+    For ``horizon == 1`` the target is ``|log_return[t+1]|`` and the
+    persistence baseline is yesterday's |log_return|.
+
+    For ``horizon > 1`` the target is the realised volatility over the
+    next ``h`` days:
+        y[i] = sqrt(sum_{k=1..h} log_return[t+k]^2)
+    and the baseline is the realised volatility over the *previous*
+    ``h`` days. Bigger h = smoother target, weaker persistence
+    baseline, lower-noise predictions.
+    """
+    n = len(features)
+    log_returns = np.log(closes[1:] / closes[:-1]).astype(np.float32)  # length n-1
+    sq = log_returns**2
+
+    if horizon < 1:
+        raise ValueError("horizon must be >= 1")
+    if n < WINDOW_SIZE + horizon:
+        raise ValueError(f"Need at least {WINDOW_SIZE + horizon} rows, got {n}")
+
+    n_windows = n - WINDOW_SIZE - horizon + 1
     X = np.empty((n_windows, WINDOW_SIZE, features.shape[1]), dtype=np.float32)
     y = np.empty(n_windows, dtype=np.float32)
-    vol_at_t = np.empty(n_windows, dtype=np.float32)
+    baseline = np.empty(n_windows, dtype=np.float32)
 
     for i in range(n_windows):
         X[i] = _zscore_window(features[i : i + WINDOW_SIZE])
-        y[i] = abs_log_returns[i + WINDOW_SIZE - 1]
-        vol_at_t[i] = abs_log_returns[i + WINDOW_SIZE - 2]
-    return X, y, vol_at_t
+        # Target window: next `horizon` log returns after the input window.
+        # log_returns is indexed 0..n-2; the last day inside input window
+        # corresponds to log_returns index (i + WINDOW_SIZE - 2).
+        future_start = i + WINDOW_SIZE - 1
+        y[i] = float(np.sqrt(sq[future_start : future_start + horizon].sum()))
+        past_start = i + WINDOW_SIZE - 1 - horizon
+        baseline[i] = float(np.sqrt(sq[past_start : past_start + horizon].sum()))
+    return X, y, baseline
 
 
 def train_model(X_tr: np.ndarray, y_tr: np.ndarray, X_val: np.ndarray, y_val: np.ndarray):
@@ -127,9 +148,18 @@ def main() -> None:
         "--test-days",
         type=int,
         default=14,
-        help="how many recent days to back-test the model on (default 14)",
+        help="how many recent days to back-test the 1-day model on (default 14)",
+    )
+    p.add_argument(
+        "--horizons",
+        default="1,5,10",
+        help="comma-separated forecast horizons in days for the final fan forecast "
+        "(default '1,5,10'). One model is retrained per horizon.",
     )
     args = p.parse_args()
+    horizons = sorted({int(h) for h in args.horizons.split(",") if h.strip()})
+    if not horizons or min(horizons) < 1:
+        raise SystemExit("--horizons must be a comma list of positive integers, e.g. '1,5,10'")
 
     csv_path = find_csv(args.ticker, args.source)
     print(f"loading {csv_path}...")
@@ -202,37 +232,61 @@ def main() -> None:
     print(f"  model wins      = {n_wins}/{test_n} days")
 
     # ------------------------------------------------------------------
-    # Phase 3 — retrain on ALL data and predict the NEXT day
+    # Phase 3 — retrain on ALL data, predict each requested horizon
     # ------------------------------------------------------------------
-    print(f"\nretraining on all {len(X_all)} windows for tomorrow's prediction...")
-    cut2 = int(len(X_all) * 0.85)
-    X_tr2, X_val2 = X_all[:cut2], X_all[cut2:]
-    y_tr2, y_val2 = y_all[:cut2], y_all[cut2:]
-    final_model = train_model(X_tr2, y_tr2, X_val2, y_val2)
-
     last_window = features[-WINDOW_SIZE:]
     X_now = _zscore_window(last_window)[np.newaxis, ...]
-    pred_tomorrow = float(np.maximum(final_model.predict(X_now, verbose=0)[0, 0], 0.0))
-
     last_date = df.index[-1].date()
-    next_date = last_date + pd.Timedelta(days=1)
     last_close = float(df["Close"].iloc[-1])
 
-    # Translate predicted |log_return| into a price range
-    pred_up = last_close * np.exp(+pred_tomorrow)
-    pred_down = last_close * np.exp(-pred_tomorrow)
+    print(f"\nretraining one model per horizon h in {horizons} for the fan forecast...")
+    horizon_results = []
+    for h in horizons:
+        try:
+            X_h, y_h, _ = build_vol_windows(features, closes_arr, horizon=h)
+        except ValueError as exc:
+            print(f"  [skip h={h}] {exc}")
+            continue
+        cut_h = int(len(X_h) * 0.85)
+        model_h = train_model(X_h[:cut_h], y_h[:cut_h], X_h[cut_h:], y_h[cut_h:])
+        pred_h = float(np.maximum(model_h.predict(X_now, verbose=0)[0, 0], 0.0))
+        # Implied 1-sigma price range over `h` calendar days
+        up_h = last_close * np.exp(+pred_h)
+        down_h = last_close * np.exp(-pred_h)
+        target_date = last_date + pd.Timedelta(days=h)
+        horizon_results.append(
+            {
+                "h": h,
+                "pred_vol": pred_h,
+                "up": up_h,
+                "down": down_h,
+                "target_date": target_date,
+            }
+        )
+        print(
+            f"  h={h:>2}d -> realised-vol forecast {pred_h * 100:.3f}%  "
+            f"(${down_h:.2f} .. ${up_h:.2f} by {target_date})"
+        )
 
-    print(f"\n{'-' * 60}")
-    print(f"  TOMORROW'S VOLATILITY PREDICTION ({args.ticker})")
-    print(f"{'-' * 60}")
-    print(f"  last close ({last_date}):        ${last_close:.4f}")
-    print(f"  predicted |log_return| ({next_date}): {pred_tomorrow * 100:.3f}%")
-    print(f"  implied 1-sigma range ({next_date}): ${pred_down:.4f} .. ${pred_up:.4f}")
+    print(f"\n{'-' * 70}")
+    print(f"  FAN FORECAST ({args.ticker})")
+    print(f"{'-' * 70}")
+    print(f"  last close ({last_date}): ${last_close:.4f}\n")
+    print(
+        f"  {'horizon':<12}{'realised-vol':>15}{'low (1sd)':>12}{'high (1sd)':>12}{'by date':>14}"
+    )
+    print(f"  {'-' * 65}")
+    for r in horizon_results:
+        print(
+            f"  {r['h']:>2}-day fwd  {r['pred_vol'] * 100:>13.3f}%"
+            f"{r['down']:>12.2f}{r['up']:>12.2f}  {r['target_date']!s:>12}"
+        )
+
     print()
-    print("  This is a volatility forecast — it predicts MAGNITUDE of")
-    print("  tomorrow's move, NOT direction. Skill above is over the past")
-    print(f"  {test_n} days. Treat as risk / position-sizing input, not a")
-    print("  trading signal.")
+    print("  Each row's 'low/high (1sd)' is the price range implied by the model's")
+    print("  predicted realised volatility for that horizon (price * exp(±vol)).")
+    print("  Wider bands further out reflect cumulative uncertainty. These are")
+    print("  MAGNITUDE forecasts, NOT direction. Use as risk / sizing input.")
 
 
 if __name__ == "__main__":
