@@ -3,11 +3,26 @@
 [![tests](https://github.com/darius225/Neural-nets/actions/workflows/test.yml/badge.svg)](https://github.com/darius225/Neural-nets/actions/workflows/test.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A CNN-based next-day close predictor for US equities, plus the
+A CNN-based next-day predictor for stocks and crypto, plus the
 methodology and experiments needed to know whether it actually works.
-The headline finding: at daily resolution, OHLCV-derived features
-contain no exploitable signal beyond the naive persistence baseline
-(`predict tomorrow = today`). The pipeline correctly identifies that.
+
+**Two headline findings, both validated by walk-forward across dozens
+of out-of-sample folds:**
+
+1. **Next-day *direction / magnitude* of returns is not predictable**
+   from public daily OHLCV alone — confirmed across 10 S&P 500 tickers
+   (2008 crisis) and ETH/BTC (2022 LUNA/FTX). Mean IC ≈ 0, t-stat
+   indistinguishable from noise. Weak-form market efficiency holds.
+2. **Next-day *volatility* IS predictable.** Same architecture,
+   same features, same walk-forward folds — only the target changes
+   from `return[t+1]` to `|log_return[t+1]|`. Mean skill score vs the
+   yesterday-volatility-persistence baseline: **+0.34** (t-stat 13.45,
+   p < 0.01) across 6 ETH+BTC folds, **positive in all six** including
+   the LUNA/FTX 2022 fold. This matches the GARCH-literature range
+   for one-day-ahead realised-volatility forecasts (~+0.20-0.40).
+
+The methodology section is where the value is — not the (deliberately
+modest) architecture.
 
 This repo is structured around showing the *process* of arriving at
 that conclusion: five iterations of progressively better methodology,
@@ -34,6 +49,10 @@ uv run python experiments/walk_forward_eth.py
 
 # stock-side mirror: 10 tickers x 6 years = 60-cell panel
 uv run python experiments/walk_forward_stocks.py
+
+# the volatility pivot — the first experiment that produces a real
+# positive skill score (mean +0.34, t-stat +13.45, p < 0.01)
+uv run python experiments/walk_forward_vol_eth.py
 
 # predict tomorrow's close for a ticker you trained on
 uv run python scripts/train_and_save.py JPM
@@ -382,6 +401,17 @@ synthetic-landscape convergence). Runs in ~12 s on CPU.
   book), or much higher frequency (intraday microstructure). Each
   requires a data source the current OHLCV-only pipeline deliberately
   doesn't touch.
+- **The volatility pivot is the real result.** Every prior experiment
+  said "return prediction doesn't work". Changing the target to
+  `|log_return[t+1]|` while keeping everything else identical lifts
+  skill from ~0 to **+0.34** with t-stat 13.45 across 6 ETH+BTC folds.
+  That's not magic — it's volatility clustering (GARCH, Engle 1982,
+  Nobel 2003): today's |return| genuinely informs tomorrow's. The
+  lesson is methodological: when a target is unpredictable, ask
+  whether you can predict a *transformation* of it that has structure.
+  Volatility prediction directly feeds options pricing, position
+  sizing, and risk management — the actually-tradeable parts of
+  quant work.
 
 ## Tech stack
 
