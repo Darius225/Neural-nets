@@ -1,0 +1,73 @@
+{
+  "settings": {
+    "tickers": [
+      "ETHUSDT",
+      "BTCUSDT",
+      "SOLUSDT",
+      "BNBUSDT"
+    ],
+    "test_days": 60,
+    "quantiles": [
+      0.25,
+      0.5,
+      0.75
+    ],
+    "seed": 42,
+    "learning_rate": 0.05,
+    "num_leaves": 31,
+    "out_path": "scripts/results/predict_vol_dashboard.json"
+  },
+  "forecasts": [
+    {
+      "ticker": "ETHUSDT",
+      "last_close": 2179.0,
+      "last_date": "2026-05-16",
+      "q_low": 0.007608599404388,
+      "q_mid": 0.016895239319437986,
+      "q_high": 0.024801187685354456,
+      "backtest_coverage": 51.66666666666667,
+      "backtest_skill": 0.4865089691127993,
+      "backtest_mae_pct": 1.2173929464940636,
+      "inner_band_pct": 1.689604311941928
+    },
+    {
+      "ticker": "BTCUSDT",
+      "last_close": 78289.99,
+      "last_date": "2026-05-16",
+      "q_low": 0.004183329970345806,
+      "q_mid": 0.011970980171657672,
+      "q_high": 0.017914707070894903,
+      "backtest_coverage": 53.333333333333336,
+      "backtest_skill": 0.534371577302867,
+      "backtest_mae_pct": 0.9205538418774094,
+      "inner_band_pct": 1.1971266089327526
+    },
+    {
+      "ticker": "SOLUSDT",
+      "last_close": 85.24,
+      "last_date": "2026-05-17",
+      "q_low": 0.01404452265221458,
+      "q_mid": 0.028596225300747333,
+      "q_high": 0.039304295418750135,
+      "backtest_coverage": 36.666666666666664,
+      "backtest_skill": 0.39175192727122177,
+      "backtest_mae_pct": 1.4222954930557457,
+      "inner_band_pct": 2.8600122859198107
+    },
+    {
+      "ticker": "BNBUSDT",
+      "last_close": 649.48,
+      "last_date": "2026-05-17",
+      "q_low": 0.005733171960843618,
+      "q_mid": 0.013905098769830947,
+      "q_high": 0.021094493628523385,
+      "backtest_coverage": 40.0,
+      "backtest_skill": 0.3847447765070995,
+      "backtest_mae_pct": 0.8457059329326562,
+      "inner_band_pct": 1.3905546870076946
+    }
+  ],
+  "mean_skill": 0.4493443125484969,
+  "mean_coverage": 45.416666666666664,
+  "wall_time_s": 2.351715087890625
+}
